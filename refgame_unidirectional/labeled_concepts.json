@@ -1,0 +1,2763 @@
+{
+  "accordion": {
+    "label_name": "accordion",
+    "label_id": 401,
+    "sample_indices": [
+      515357,
+      515148,
+      514969,
+      514684,
+      515264
+    ]
+  },
+  "alligator": {
+    "label_name": "alligator lizard",
+    "label_id": 44,
+    "sample_indices": [
+      57833,
+      57909,
+      57177,
+      57364,
+      57368
+    ]
+  },
+  "ambulance": {
+    "label_name": "ambulance",
+    "label_id": 407,
+    "sample_indices": [
+      522908,
+      522643,
+      522425,
+      523354,
+      522990
+    ]
+  },
+  "ant": {
+    "label_name": "tarantula",
+    "label_id": 76,
+    "sample_indices": [
+      98381,
+      98406,
+      98861,
+      98395,
+      99635
+    ]
+  },
+  "apple": {
+    "label_name": "pineapple",
+    "label_id": 953,
+    "sample_indices": [
+      1220952,
+      1220308,
+      1220565,
+      1221343,
+      1220339
+    ]
+  },
+  "apron": {
+    "label_name": "apron",
+    "label_id": 411,
+    "sample_indices": [
+      528142,
+      527606,
+      528410,
+      527427,
+      528098
+    ]
+  },
+  "bag": {
+    "label_name": "cabbage butterfly",
+    "label_id": 324,
+    "sample_indices": [
+      415435,
+      415254,
+      415560,
+      415313,
+      415842
+    ]
+  },
+  "ball": {
+    "label_name": "balloon",
+    "label_id": 417,
+    "sample_indices": [
+      535392,
+      535660,
+      535816,
+      536479,
+      535736
+    ]
+  },
+  "balloon": {
+    "label_name": "balloon",
+    "label_id": 417,
+    "sample_indices": [
+      535712,
+      535932,
+      535938,
+      536127,
+      536192
+    ]
+  },
+  "banana": {
+    "label_name": "banana",
+    "label_id": 954,
+    "sample_indices": [
+      1222506,
+      1222594,
+      1221696,
+      1221776,
+      1222006
+    ]
+  },
+  "banjo": {
+    "label_name": "banjo",
+    "label_id": 420,
+    "sample_indices": [
+      539747,
+      539627,
+      539886,
+      539169,
+      540349
+    ]
+  },
+  "barn": {
+    "label_name": "barn spider",
+    "label_id": 73,
+    "sample_indices": [
+      94855,
+      94657,
+      95314,
+      94482,
+      94668
+    ]
+  },
+  "barrel": {
+    "label_name": "barrel",
+    "label_id": 427,
+    "sample_indices": [
+      548120,
+      549248,
+      548478,
+      549214,
+      549249
+    ]
+  },
+  "basket": {
+    "label_name": "basketball",
+    "label_id": 430,
+    "sample_indices": [
+      552476,
+      552764,
+      551958,
+      552596,
+      553006
+    ]
+  },
+  "bathtub": {
+    "label_name": "bathtub",
+    "label_id": 435,
+    "sample_indices": [
+      559262,
+      558831,
+      558750,
+      559053,
+      558468
+    ]
+  },
+  "bear": {
+    "label_name": "brown bear",
+    "label_id": 294,
+    "sample_indices": [
+      376782,
+      376651,
+      376601,
+      376595,
+      377047
+    ]
+  },
+  "beaver": {
+    "label_name": "beaver",
+    "label_id": 337,
+    "sample_indices": [
+      432230,
+      432271,
+      432263,
+      431755,
+      432167
+    ]
+  },
+  "bed": {
+    "label_name": "Bedlington terrier",
+    "label_id": 181,
+    "sample_indices": [
+      232209,
+      231494,
+      231945,
+      231626,
+      232475
+    ]
+  },
+  "beetle": {
+    "label_name": "tiger beetle",
+    "label_id": 300,
+    "sample_indices": [
+      383998,
+      384698,
+      384442,
+      384351,
+      384631
+    ]
+  },
+  "belt": {
+    "label_name": "seat belt",
+    "label_id": 785,
+    "sample_indices": [
+      1006179,
+      1006338,
+      1005694,
+      1006521,
+      1006559
+    ]
+  },
+  "bench": {
+    "label_name": "park bench",
+    "label_id": 703,
+    "sample_indices": [
+      902705,
+      901664,
+      902208,
+      902089,
+      902575
+    ]
+  },
+  "bike": {
+    "label_name": "mountain bike",
+    "label_id": 671,
+    "sample_indices": [
+      861130,
+      862071,
+      861027,
+      861335,
+      861392
+    ]
+  },
+  "bison": {
+    "label_name": "bison",
+    "label_id": 347,
+    "sample_indices": [
+      444957,
+      445644,
+      445101,
+      444959,
+      445243
+    ]
+  },
+  "boat": {
+    "label_name": "boathouse",
+    "label_id": 449,
+    "sample_indices": [
+      576832,
+      577292,
+      577629,
+      576627,
+      577639
+    ]
+  },
+  "book": {
+    "label_name": "bookcase",
+    "label_id": 453,
+    "sample_indices": [
+      582925,
+      582920,
+      582334,
+      582701,
+      582205
+    ]
+  },
+  "bookcase": {
+    "label_name": "bookcase",
+    "label_id": 453,
+    "sample_indices": [
+      582464,
+      581943,
+      582047,
+      582024,
+      581964
+    ]
+  },
+  "bottle": {
+    "label_name": "beer bottle",
+    "label_id": 440,
+    "sample_indices": [
+      565665,
+      566161,
+      565137,
+      565397,
+      566099
+    ]
+  },
+  "bowl": {
+    "label_name": "mixing bowl",
+    "label_id": 659,
+    "sample_indices": [
+      846365,
+      845902,
+      845903,
+      846114,
+      845657
+    ]
+  },
+  "box": {
+    "label_name": "box turtle",
+    "label_id": 37,
+    "sample_indices": [
+      49313,
+      48897,
+      49116,
+      49131,
+      49256
+    ]
+  },
+  "bra": {
+    "label_name": "brambling",
+    "label_id": 10,
+    "sample_indices": [
+      13243,
+      14164,
+      13814,
+      14032,
+      14187
+    ]
+  },
+  "bridge": {
+    "label_name": "steel arch bridge",
+    "label_id": 821,
+    "sample_indices": [
+      1051989,
+      1052225,
+      1052753,
+      1052118,
+      1052758
+    ]
+  },
+  "broccoli": {
+    "label_name": "broccoli",
+    "label_id": 937,
+    "sample_indices": [
+      1200137,
+      1199829,
+      1200147,
+      1200084,
+      1200299
+    ]
+  },
+  "broom": {
+    "label_name": "broom",
+    "label_id": 462,
+    "sample_indices": [
+      594684,
+      594404,
+      593816,
+      594486,
+      594093
+    ]
+  },
+  "brush": {
+    "label_name": "paintbrush",
+    "label_id": 696,
+    "sample_indices": [
+      892608,
+      893040,
+      892497,
+      892783,
+      893626
+    ]
+  },
+  "bucket": {
+    "label_name": "bucket",
+    "label_id": 463,
+    "sample_indices": [
+      595290,
+      595487,
+      595760,
+      595133,
+      594955
+    ]
+  },
+  "buckle": {
+    "label_name": "buckle",
+    "label_id": 464,
+    "sample_indices": [
+      596625,
+      596180,
+      597111,
+      596222,
+      596376
+    ]
+  },
+  "buffalo": {
+    "label_name": "water buffalo",
+    "label_id": 346,
+    "sample_indices": [
+      443962,
+      443480,
+      444080,
+      444048,
+      444668
+    ]
+  },
+  "bull": {
+    "label_name": "bullfrog",
+    "label_id": 30,
+    "sample_indices": [
+      39953,
+      40157,
+      39072,
+      40060,
+      39539
+    ]
+  },
+  "bullet": {
+    "label_name": "bulletproof vest",
+    "label_id": 465,
+    "sample_indices": [
+      598451,
+      597463,
+      597769,
+      597633,
+      597973
+    ]
+  },
+  "bus": {
+    "label_name": "bustard",
+    "label_id": 138,
+    "sample_indices": [
+      179109,
+      179968,
+      179192,
+      179045,
+      179862
+    ]
+  },
+  "butterfly": {
+    "label_name": "cabbage butterfly",
+    "label_id": 324,
+    "sample_indices": [
+      415796,
+      415450,
+      415660,
+      415293,
+      415643
+    ]
+  },
+  "cabbage": {
+    "label_name": "cabbage butterfly",
+    "label_id": 324,
+    "sample_indices": [
+      415675,
+      414947,
+      415134,
+      415262,
+      415645
+    ]
+  },
+  "cabin": {
+    "label_name": "china cabinet",
+    "label_id": 495,
+    "sample_indices": [
+      636393,
+      637080,
+      636700,
+      636343,
+      636745
+    ]
+  },
+  "cabinet": {
+    "label_name": "china cabinet",
+    "label_id": 495,
+    "sample_indices": [
+      637244,
+      636772,
+      637241,
+      636796,
+      636604
+    ]
+  },
+  "camel": {
+    "label_name": "Arabian camel",
+    "label_id": 354,
+    "sample_indices": [
+      454441,
+      454814,
+      454308,
+      454365,
+      454218
+    ]
+  },
+  "candle": {
+    "label_name": "candle",
+    "label_id": 470,
+    "sample_indices": [
+      604921,
+      604000,
+      604078,
+      604013,
+      603879
+    ]
+  },
+  "cannon": {
+    "label_name": "cannon",
+    "label_id": 471,
+    "sample_indices": [
+      605479,
+      605664,
+      605841,
+      605506,
+      605323
+    ]
+  },
+  "canoe": {
+    "label_name": "canoe",
+    "label_id": 472,
+    "sample_indices": [
+      607106,
+      606972,
+      607040,
+      607241,
+      606372
+    ]
+  },
+  "car": {
+    "label_name": "Cardigan",
+    "label_id": 264,
+    "sample_indices": [
+      337567,
+      337493,
+      337666,
+      337935,
+      338698
+    ]
+  },
+  "cart": {
+    "label_name": "carton",
+    "label_id": 478,
+    "sample_indices": [
+      614161,
+      615226,
+      614580,
+      614820,
+      615018
+    ]
+  },
+  "cat": {
+    "label_name": "oystercatcher",
+    "label_id": 143,
+    "sample_indices": [
+      186213,
+      185481,
+      185803,
+      185437,
+      185420
+    ]
+  },
+  "cauliflower": {
+    "label_name": "cauliflower",
+    "label_id": 938,
+    "sample_indices": [
+      1201721,
+      1202045,
+      1201423,
+      1201526,
+      1202134
+    ]
+  },
+  "cello": {
+    "label_name": "cello",
+    "label_id": 486,
+    "sample_indices": [
+      625455,
+      624546,
+      624829,
+      625567,
+      625616
+    ]
+  },
+  "chain": {
+    "label_name": "chain",
+    "label_id": 488,
+    "sample_indices": [
+      627915,
+      627100,
+      627400,
+      627341,
+      627185
+    ]
+  },
+  "chair": {
+    "label_name": "barber chair",
+    "label_id": 423,
+    "sample_indices": [
+      543982,
+      543410,
+      543090,
+      543808,
+      543408
+    ]
+  },
+  "cheese": {
+    "label_name": "cheeseburger",
+    "label_id": 933,
+    "sample_indices": [
+      1195619,
+      1195502,
+      1195416,
+      1194727,
+      1195446
+    ]
+  },
+  "cheetah": {
+    "label_name": "cheetah",
+    "label_id": 293,
+    "sample_indices": [
+      374833,
+      375053,
+      375787,
+      375135,
+      375662
+    ]
+  },
+  "chickadee": {
+    "label_name": "chickadee",
+    "label_id": 19,
+    "sample_indices": [
+      25893,
+      24824,
+      25939,
+      25333,
+      25507
+    ]
+  },
+  "chicken": {
+    "label_name": "prairie chicken",
+    "label_id": 83,
+    "sample_indices": [
+      108194,
+      107787,
+      108650,
+      108704,
+      108448
+    ]
+  },
+  "chimp": {
+    "label_name": "chimpanzee",
+    "label_id": 367,
+    "sample_indices": [
+      471474,
+      471224,
+      471302,
+      471844,
+      471614
+    ]
+  },
+  "church": {
+    "label_name": "church",
+    "label_id": 497,
+    "sample_indices": [
+      639237,
+      639119,
+      638723,
+      638662,
+      638984
+    ]
+  },
+  "cloak": {
+    "label_name": "cloak",
+    "label_id": 501,
+    "sample_indices": [
+      644405,
+      643699,
+      644145,
+      644180,
+      643595
+    ]
+  },
+  "clock": {
+    "label_name": "analog clock",
+    "label_id": 409,
+    "sample_indices": [
+      525815,
+      525161,
+      525241,
+      525963,
+      525104
+    ]
+  },
+  "coat": {
+    "label_name": "soft-coated wheaten terrier",
+    "label_id": 202,
+    "sample_indices": [
+      258594,
+      257837,
+      258678,
+      258526,
+      257901
+    ]
+  },
+  "cockroach": {
+    "label_name": "cockroach",
+    "label_id": 314,
+    "sample_indices": [
+      402870,
+      401948,
+      402427,
+      401924,
+      403026
+    ]
+  },
+  "cod": {
+    "label_name": "African crocodile",
+    "label_id": 49,
+    "sample_indices": [
+      64428,
+      64431,
+      63743,
+      63932,
+      63596
+    ]
+  },
+  "comb": {
+    "label_name": "combination lock",
+    "label_id": 507,
+    "sample_indices": [
+      652092,
+      651351,
+      651025,
+      651623,
+      651740
+    ]
+  },
+  "cork": {
+    "label_name": "corkscrew",
+    "label_id": 512,
+    "sample_indices": [
+      658555,
+      658601,
+      657801,
+      657795,
+      658652
+    ]
+  },
+  "corkscrew": {
+    "label_name": "corkscrew",
+    "label_id": 512,
+    "sample_indices": [
+      657545,
+      657566,
+      658516,
+      657607,
+      657710
+    ]
+  },
+  "corn": {
+    "label_name": "cornet",
+    "label_id": 513,
+    "sample_indices": [
+      659671,
+      658891,
+      658903,
+      659027,
+      659180
+    ]
+  },
+  "couch": {
+    "label_name": "studio couch",
+    "label_id": 831,
+    "sample_indices": [
+      1064804,
+      1065021,
+      1064816,
+      1065524,
+      1064556
+    ]
+  },
+  "cougar": {
+    "label_name": "cougar",
+    "label_id": 286,
+    "sample_indices": [
+      366272,
+      365966,
+      366649,
+      366667,
+      366591
+    ]
+  },
+  "cow": {
+    "label_name": "cowboy boot",
+    "label_id": 514,
+    "sample_indices": [
+      660272,
+      660211,
+      660371,
+      660334,
+      660881
+    ]
+  },
+  "coyote": {
+    "label_name": "coyote",
+    "label_id": 272,
+    "sample_indices": [
+      348188,
+      347336,
+      347955,
+      347756,
+      347935
+    ]
+  },
+  "crab": {
+    "label_name": "Dungeness crab",
+    "label_id": 118,
+    "sample_indices": [
+      153499,
+      153728,
+      153103,
+      153296,
+      153398
+    ]
+  },
+  "crocodile": {
+    "label_name": "African crocodile",
+    "label_id": 49,
+    "sample_indices": [
+      63766,
+      64257,
+      63821,
+      64213,
+      64254
+    ]
+  },
+  "crow": {
+    "label_name": "microwave",
+    "label_id": 651,
+    "sample_indices": [
+      835606,
+      836349,
+      835653,
+      835782,
+      836300
+    ]
+  },
+  "cucumber": {
+    "label_name": "sea cucumber",
+    "label_id": 329,
+    "sample_indices": [
+      421547,
+      421723,
+      422590,
+      422611,
+      422222
+    ]
+  },
+  "cup": {
+    "label_name": "porcupine",
+    "label_id": 334,
+    "sample_indices": [
+      427925,
+      427927,
+      428820,
+      428233,
+      428650
+    ]
+  },
+  "deer": {
+    "label_name": "Scottish deerhound",
+    "label_id": 177,
+    "sample_indices": [
+      227392,
+      226535,
+      227382,
+      227152,
+      226962
+    ]
+  },
+  "desk": {
+    "label_name": "desk",
+    "label_id": 526,
+    "sample_indices": [
+      676487,
+      675651,
+      676751,
+      675578,
+      675621
+    ]
+  },
+  "dish": {
+    "label_name": "dishrag",
+    "label_id": 533,
+    "sample_indices": [
+      685320,
+      684465,
+      684183,
+      684600,
+      684208
+    ]
+  },
+  "dishwasher": {
+    "label_name": "dishwasher",
+    "label_id": 534,
+    "sample_indices": [
+      686152,
+      686149,
+      685699,
+      686069,
+      685705
+    ]
+  },
+  "dog": {
+    "label_name": "Maltese dog",
+    "label_id": 153,
+    "sample_indices": [
+      197908,
+      197951,
+      198594,
+      197649,
+      198824
+    ]
+  },
+  "door": {
+    "label_name": "doormat",
+    "label_id": 539,
+    "sample_indices": [
+      692619,
+      692790,
+      692291,
+      692621,
+      692737
+    ]
+  },
+  "drill": {
+    "label_name": "drilling platform",
+    "label_id": 540,
+    "sample_indices": [
+      694050,
+      694280,
+      693710,
+      694041,
+      694366
+    ]
+  },
+  "drum": {
+    "label_name": "drum",
+    "label_id": 541,
+    "sample_indices": [
+      695004,
+      695100,
+      694480,
+      695583,
+      695462
+    ]
+  },
+  "eagle": {
+    "label_name": "bald eagle",
+    "label_id": 22,
+    "sample_indices": [
+      29573,
+      28625,
+      28794,
+      29158,
+      29814
+    ]
+  },
+  "eel": {
+    "label_name": "eel",
+    "label_id": 390,
+    "sample_indices": [
+      501555,
+      501083,
+      501572,
+      501000,
+      500849
+    ]
+  },
+  "elephant": {
+    "label_name": "Indian elephant",
+    "label_id": 385,
+    "sample_indices": [
+      495131,
+      494660,
+      494184,
+      494187,
+      495271
+    ]
+  },
+  "elk": {
+    "label_name": "Norwegian elkhound",
+    "label_id": 174,
+    "sample_indices": [
+      224039,
+      223397,
+      223489,
+      223299,
+      223527
+    ]
+  },
+  "envelope": {
+    "label_name": "envelope",
+    "label_id": 549,
+    "sample_indices": [
+      705165,
+      705129,
+      705265,
+      705729,
+      704930
+    ]
+  },
+  "fence": {
+    "label_name": "chainlink fence",
+    "label_id": 489,
+    "sample_indices": [
+      628772,
+      628410,
+      628912,
+      629286,
+      629107
+    ]
+  },
+  "finch": {
+    "label_name": "goldfinch",
+    "label_id": 11,
+    "sample_indices": [
+      15064,
+      14831,
+      15060,
+      14885,
+      15527
+    ]
+  },
+  "flamingo": {
+    "label_name": "flamingo",
+    "label_id": 130,
+    "sample_indices": [
+      169572,
+      168626,
+      169169,
+      168563,
+      168964
+    ]
+  },
+  "flute": {
+    "label_name": "flute",
+    "label_id": 558,
+    "sample_indices": [
+      716971,
+      717008,
+      716455,
+      716851,
+      717443
+    ]
+  },
+  "football": {
+    "label_name": "football helmet",
+    "label_id": 560,
+    "sample_indices": [
+      719648,
+      719847,
+      719525,
+      719756,
+      719447
+    ]
+  },
+  "fork": {
+    "label_name": "forklift",
+    "label_id": 561,
+    "sample_indices": [
+      720409,
+      721068,
+      720685,
+      720978,
+      721223
+    ]
+  },
+  "fox": {
+    "label_name": "English foxhound",
+    "label_id": 167,
+    "sample_indices": [
+      214542,
+      214525,
+      214604,
+      214889,
+      215014
+    ]
+  },
+  "frog": {
+    "label_name": "bullfrog",
+    "label_id": 30,
+    "sample_indices": [
+      40174,
+      40162,
+      39793,
+      40118,
+      39828
+    ]
+  },
+  "goldfish": {
+    "label_name": "goldfish",
+    "label_id": 1,
+    "sample_indices": [
+      2269,
+      2152,
+      1468,
+      1420,
+      1467
+    ]
+  },
+  "goose": {
+    "label_name": "goose",
+    "label_id": 99,
+    "sample_indices": [
+      128444,
+      128895,
+      128884,
+      129142,
+      128776
+    ]
+  },
+  "gorilla": {
+    "label_name": "gorilla",
+    "label_id": 366,
+    "sample_indices": [
+      470321,
+      469748,
+      469837,
+      470414,
+      469673
+    ]
+  },
+  "gown": {
+    "label_name": "academic gown",
+    "label_id": 400,
+    "sample_indices": [
+      513391,
+      514294,
+      514122,
+      513139,
+      513839
+    ]
+  },
+  "grasshopper": {
+    "label_name": "grasshopper",
+    "label_id": 311,
+    "sample_indices": [
+      399133,
+      398557,
+      399189,
+      398841,
+      399028
+    ]
+  },
+  "guitar": {
+    "label_name": "acoustic guitar",
+    "label_id": 402,
+    "sample_indices": [
+      516471,
+      516830,
+      516956,
+      515895,
+      516743
+    ]
+  },
+  "hammer": {
+    "label_name": "hammerhead",
+    "label_id": 4,
+    "sample_indices": [
+      6139,
+      6394,
+      6266,
+      6317,
+      5750
+    ]
+  },
+  "hamster": {
+    "label_name": "hamster",
+    "label_id": 333,
+    "sample_indices": [
+      427142,
+      427254,
+      427163,
+      426850,
+      427151
+    ]
+  },
+  "hare": {
+    "label_name": "hare",
+    "label_id": 331,
+    "sample_indices": [
+      425040,
+      424187,
+      424690,
+      424628,
+      424865
+    ]
+  },
+  "harmonica": {
+    "label_name": "harmonica",
+    "label_id": 593,
+    "sample_indices": [
+      761841,
+      761919,
+      761486,
+      761643,
+      762353
+    ]
+  },
+  "harp": {
+    "label_name": "harp",
+    "label_id": 594,
+    "sample_indices": [
+      763531,
+      763034,
+      762598,
+      763041,
+      762873
+    ]
+  },
+  "hatchet": {
+    "label_name": "hatchet",
+    "label_id": 596,
+    "sample_indices": [
+      764977,
+      765257,
+      765626,
+      765044,
+      765056
+    ]
+  },
+  "helmet": {
+    "label_name": "crash helmet",
+    "label_id": 518,
+    "sample_indices": [
+      666454,
+      666187,
+      665868,
+      666212,
+      666429
+    ]
+  },
+  "hoe": {
+    "label_name": "running shoe",
+    "label_id": 770,
+    "sample_indices": [
+      987329,
+      986633,
+      986574,
+      987655,
+      987048
+    ]
+  },
+  "hook": {
+    "label_name": "hook",
+    "label_id": 600,
+    "sample_indices": [
+      770711,
+      770177,
+      770452,
+      770235,
+      770722
+    ]
+  },
+  "horse": {
+    "label_name": "horse cart",
+    "label_id": 603,
+    "sample_indices": [
+      774479,
+      774043,
+      774607,
+      774171,
+      774593
+    ]
+  },
+  "house": {
+    "label_name": "house finch",
+    "label_id": 12,
+    "sample_indices": [
+      15656,
+      16359,
+      16681,
+      15815,
+      16422
+    ]
+  },
+  "hut": {
+    "label_name": "parachute",
+    "label_id": 701,
+    "sample_indices": [
+      900236,
+      899553,
+      899119,
+      900137,
+      899574
+    ]
+  },
+  "hyena": {
+    "label_name": "hyena",
+    "label_id": 276,
+    "sample_indices": [
+      353472,
+      353410,
+      352525,
+      352522,
+      353238
+    ]
+  },
+  "iguana": {
+    "label_name": "common iguana",
+    "label_id": 39,
+    "sample_indices": [
+      51288,
+      51002,
+      51466,
+      51982,
+      51171
+    ]
+  },
+  "jacket": {
+    "label_name": "book jacket",
+    "label_id": 921,
+    "sample_indices": [
+      1180243,
+      1180125,
+      1179881,
+      1179237,
+      1180080
+    ]
+  },
+  "jeep": {
+    "label_name": "jeep",
+    "label_id": 609,
+    "sample_indices": [
+      781636,
+      782597,
+      781838,
+      781624,
+      782649
+    ]
+  },
+  "key": {
+    "label_name": "proboscis monkey",
+    "label_id": 376,
+    "sample_indices": [
+      482916,
+      483406,
+      482997,
+      483133,
+      483550
+    ]
+  },
+  "kite": {
+    "label_name": "kite",
+    "label_id": 21,
+    "sample_indices": [
+      28231,
+      28425,
+      28250,
+      27738,
+      28459
+    ]
+  },
+  "ladle": {
+    "label_name": "ladle",
+    "label_id": 618,
+    "sample_indices": [
+      793381,
+      793146,
+      793515,
+      793941,
+      794280
+    ]
+  },
+  "lamp": {
+    "label_name": "lampshade",
+    "label_id": 619,
+    "sample_indices": [
+      795577,
+      795125,
+      794452,
+      795177,
+      794566
+    ]
+  },
+  "lantern": {
+    "label_name": "jack-o'-lantern",
+    "label_id": 607,
+    "sample_indices": [
+      779963,
+      779557,
+      779611,
+      779587,
+      779018
+    ]
+  },
+  "lemon": {
+    "label_name": "lemon",
+    "label_id": 951,
+    "sample_indices": [
+      1218064,
+      1218181,
+      1218162,
+      1217839,
+      1218803
+    ]
+  },
+  "leopard": {
+    "label_name": "leopard",
+    "label_id": 288,
+    "sample_indices": [
+      368171,
+      368442,
+      368429,
+      368549,
+      368837
+    ]
+  },
+  "limousine": {
+    "label_name": "limousine",
+    "label_id": 627,
+    "sample_indices": [
+      805202,
+      804753,
+      805609,
+      805108,
+      805575
+    ]
+  },
+  "lion": {
+    "label_name": "sea lion",
+    "label_id": 150,
+    "sample_indices": [
+      194523,
+      194514,
+      194729,
+      195122,
+      194645
+    ]
+  },
+  "lobster": {
+    "label_name": "American lobster",
+    "label_id": 122,
+    "sample_indices": [
+      158355,
+      158366,
+      158084,
+      159093,
+      158947
+    ]
+  },
+  "mat": {
+    "label_name": "nematode",
+    "label_id": 111,
+    "sample_indices": [
+      144490,
+      143710,
+      144328,
+      144843,
+      144790
+    ]
+  },
+  "menu": {
+    "label_name": "menu",
+    "label_id": 922,
+    "sample_indices": [
+      1181134,
+      1180809,
+      1180581,
+      1180398,
+      1181637
+    ]
+  },
+  "microwave": {
+    "label_name": "microwave",
+    "label_id": 651,
+    "sample_indices": [
+      836314,
+      835455,
+      835799,
+      835594,
+      836556
+    ]
+  },
+  "mink": {
+    "label_name": "mink",
+    "label_id": 357,
+    "sample_indices": [
+      458487,
+      458494,
+      457986,
+      458090,
+      457848
+    ]
+  },
+  "mirror": {
+    "label_name": "car mirror",
+    "label_id": 475,
+    "sample_indices": [
+      610929,
+      610791,
+      611208,
+      611222,
+      611344
+    ]
+  },
+  "missile": {
+    "label_name": "missile",
+    "label_id": 657,
+    "sample_indices": [
+      843081,
+      844182,
+      843486,
+      843011,
+      843330
+    ]
+  },
+  "mouse": {
+    "label_name": "mouse",
+    "label_id": 673,
+    "sample_indices": [
+      863609,
+      864740,
+      864131,
+      863513,
+      863692
+    ]
+  },
+  "mug": {
+    "label_name": "coffee mug",
+    "label_id": 504,
+    "sample_indices": [
+      648210,
+      648076,
+      647162,
+      648035,
+      647165
+    ]
+  },
+  "mushroom": {
+    "label_name": "mushroom",
+    "label_id": 947,
+    "sample_indices": [
+      1212667,
+      1213593,
+      1212588,
+      1213242,
+      1213172
+    ]
+  },
+  "muzzle": {
+    "label_name": "muzzle",
+    "label_id": 676,
+    "sample_indices": [
+      867702,
+      867279,
+      868312,
+      868042,
+      868351
+    ]
+  },
+  "necklace": {
+    "label_name": "necklace",
+    "label_id": 679,
+    "sample_indices": [
+      871363,
+      871622,
+      871729,
+      871235,
+      871010
+    ]
+  },
+  "oak": {
+    "label_name": "cloak",
+    "label_id": 501,
+    "sample_indices": [
+      644338,
+      644318,
+      643974,
+      644097,
+      644465
+    ]
+  },
+  "orange": {
+    "label_name": "orange",
+    "label_id": 950,
+    "sample_indices": [
+      1217090,
+      1216548,
+      1216663,
+      1217262,
+      1216659
+    ]
+  },
+  "ostrich": {
+    "label_name": "ostrich",
+    "label_id": 9,
+    "sample_indices": [
+      12297,
+      12826,
+      12596,
+      11981,
+      12000
+    ]
+  },
+  "otter": {
+    "label_name": "otterhound",
+    "label_id": 175,
+    "sample_indices": [
+      224422,
+      224590,
+      224332,
+      224746,
+      224620
+    ]
+  },
+  "oven": {
+    "label_name": "Dutch oven",
+    "label_id": 544,
+    "sample_indices": [
+      698925,
+      699550,
+      698421,
+      698638,
+      699649
+    ]
+  },
+  "owl": {
+    "label_name": "great grey owl",
+    "label_id": 24,
+    "sample_indices": [
+      31885,
+      32456,
+      32281,
+      31394,
+      31669
+    ]
+  },
+  "ox": {
+    "label_name": "box turtle",
+    "label_id": 37,
+    "sample_indices": [
+      49376,
+      49137,
+      49347,
+      49160,
+      48569
+    ]
+  },
+  "paintbrush": {
+    "label_name": "paintbrush",
+    "label_id": 696,
+    "sample_indices": [
+      893476,
+      893036,
+      893687,
+      892614,
+      892825
+    ]
+  },
+  "pan": {
+    "label_name": "Japanese spaniel",
+    "label_id": 152,
+    "sample_indices": [
+      197028,
+      197246,
+      196984,
+      197204,
+      196855
+    ]
+  },
+  "partridge": {
+    "label_name": "partridge",
+    "label_id": 86,
+    "sample_indices": [
+      111434,
+      112027,
+      111652,
+      111486,
+      111450
+    ]
+  },
+  "peacock": {
+    "label_name": "peacock",
+    "label_id": 84,
+    "sample_indices": [
+      109308,
+      109186,
+      109015,
+      109751,
+      109942
+    ]
+  },
+  "pelican": {
+    "label_name": "pelican",
+    "label_id": 144,
+    "sample_indices": [
+      187791,
+      187761,
+      186635,
+      187748,
+      186881
+    ]
+  },
+  "pen": {
+    "label_name": "king penguin",
+    "label_id": 145,
+    "sample_indices": [
+      189042,
+      188339,
+      187875,
+      188652,
+      187986
+    ]
+  },
+  "pencil": {
+    "label_name": "pencil box",
+    "label_id": 709,
+    "sample_indices": [
+      909402,
+      909180,
+      910000,
+      909295,
+      909365
+    ]
+  },
+  "penguin": {
+    "label_name": "king penguin",
+    "label_id": 145,
+    "sample_indices": [
+      188719,
+      188527,
+      187952,
+      188801,
+      188951
+    ]
+  },
+  "pepper": {
+    "label_name": "bell pepper",
+    "label_id": 945,
+    "sample_indices": [
+      1211227,
+      1210195,
+      1209971,
+      1211162,
+      1210669
+    ]
+  },
+  "piano": {
+    "label_name": "grand piano",
+    "label_id": 579,
+    "sample_indices": [
+      743948,
+      744352,
+      743922,
+      744433,
+      743889
+    ]
+  },
+  "pie": {
+    "label_name": "magpie",
+    "label_id": 18,
+    "sample_indices": [
+      23500,
+      24092,
+      23779,
+      24198,
+      24477
+    ]
+  },
+  "pier": {
+    "label_name": "photocopier",
+    "label_id": 713,
+    "sample_indices": [
+      914065,
+      914517,
+      913994,
+      914775,
+      915193
+    ]
+  },
+  "pig": {
+    "label_name": "guinea pig",
+    "label_id": 338,
+    "sample_indices": [
+      433611,
+      434011,
+      433325,
+      433579,
+      433577
+    ]
+  },
+  "pillow": {
+    "label_name": "pillow",
+    "label_id": 721,
+    "sample_indices": [
+      924747,
+      924537,
+      925342,
+      924440,
+      925392
+    ]
+  },
+  "pin": {
+    "label_name": "terrapin",
+    "label_id": 36,
+    "sample_indices": [
+      47987,
+      47610,
+      47486,
+      47761,
+      47656
+    ]
+  },
+  "pine": {
+    "label_name": "porcupine",
+    "label_id": 334,
+    "sample_indices": [
+      428392,
+      429147,
+      428282,
+      429103,
+      428876
+    ]
+  },
+  "pineapple": {
+    "label_name": "pineapple",
+    "label_id": 953,
+    "sample_indices": [
+      1220911,
+      1220646,
+      1220204,
+      1221075,
+      1220961
+    ]
+  },
+  "plate": {
+    "label_name": "breastplate",
+    "label_id": 461,
+    "sample_indices": [
+      593329,
+      593015,
+      593007,
+      593347,
+      592253
+    ]
+  },
+  "platypus": {
+    "label_name": "platypus",
+    "label_id": 103,
+    "sample_indices": [
+      133918,
+      134525,
+      133405,
+      133750,
+      134148
+    ]
+  },
+  "porcupine": {
+    "label_name": "porcupine",
+    "label_id": 334,
+    "sample_indices": [
+      427930,
+      428257,
+      428826,
+      427899,
+      428478
+    ]
+  },
+  "pot": {
+    "label_name": "spotted salamander",
+    "label_id": 28,
+    "sample_indices": [
+      36576,
+      37653,
+      37200,
+      36586,
+      37230
+    ]
+  },
+  "potato": {
+    "label_name": "mashed potato",
+    "label_id": 935,
+    "sample_indices": [
+      1197391,
+      1197367,
+      1198247,
+      1197277,
+      1197946
+    ]
+  },
+  "projector": {
+    "label_name": "projector",
+    "label_id": 745,
+    "sample_indices": [
+      955192,
+      954974,
+      954408,
+      954143,
+      954108
+    ]
+  },
+  "python": {
+    "label_name": "rock python",
+    "label_id": 62,
+    "sample_indices": [
+      80463,
+      81076,
+      80945,
+      81359,
+      80937
+    ]
+  },
+  "rabbit": {
+    "label_name": "wood rabbit",
+    "label_id": 330,
+    "sample_indices": [
+      423266,
+      422957,
+      423152,
+      423676,
+      422875
+    ]
+  },
+  "radio": {
+    "label_name": "radio",
+    "label_id": 754,
+    "sample_indices": [
+      966665,
+      966186,
+      966620,
+      966060,
+      966356
+    ]
+  },
+  "raft": {
+    "label_name": "aircraft carrier",
+    "label_id": 403,
+    "sample_indices": [
+      517986,
+      517182,
+      518188,
+      517064,
+      518236
+    ]
+  },
+  "rake": {
+    "label_name": "drake",
+    "label_id": 97,
+    "sample_indices": [
+      126095,
+      126257,
+      126176,
+      126552,
+      126906
+    ]
+  },
+  "rat": {
+    "label_name": "triceratops",
+    "label_id": 51,
+    "sample_indices": [
+      67196,
+      66950,
+      67094,
+      67144,
+      66620
+    ]
+  },
+  "revolver": {
+    "label_name": "revolver",
+    "label_id": 763,
+    "sample_indices": [
+      977419,
+      978068,
+      977571,
+      977421,
+      978433
+    ]
+  },
+  "rice": {
+    "label_name": "triceratops",
+    "label_id": 51,
+    "sample_indices": [
+      67185,
+      67055,
+      66117,
+      66820,
+      66170
+    ]
+  },
+  "rifle": {
+    "label_name": "assault rifle",
+    "label_id": 413,
+    "sample_indices": [
+      530177,
+      531022,
+      530303,
+      531200,
+      530680
+    ]
+  },
+  "robe": {
+    "label_name": "wardrobe",
+    "label_id": 894,
+    "sample_indices": [
+      1144542,
+      1144628,
+      1145738,
+      1144738,
+      1144909
+    ]
+  },
+  "robin": {
+    "label_name": "robin",
+    "label_id": 15,
+    "sample_indices": [
+      19953,
+      20548,
+      20527,
+      19980,
+      20288
+    ]
+  },
+  "rock": {
+    "label_name": "rock python",
+    "label_id": 62,
+    "sample_indices": [
+      80485,
+      81232,
+      80833,
+      80859,
+      81451
+    ]
+  },
+  "rope": {
+    "label_name": "European fire salamander",
+    "label_id": 25,
+    "sample_indices": [
+      32870,
+      33103,
+      32842,
+      33236,
+      32568
+    ]
+  },
+  "salamander": {
+    "label_name": "European fire salamander",
+    "label_id": 25,
+    "sample_indices": [
+      32501,
+      33069,
+      33191,
+      32983,
+      33299
+    ]
+  },
+  "scooter": {
+    "label_name": "motor scooter",
+    "label_id": 670,
+    "sample_indices": [
+      860427,
+      860307,
+      860526,
+      859864,
+      860224
+    ]
+  },
+  "screwdriver": {
+    "label_name": "screwdriver",
+    "label_id": 784,
+    "sample_indices": [
+      1004991,
+      1005510,
+      1004367,
+      1004558,
+      1005445
+    ]
+  },
+  "seal": {
+    "label_name": "Sealyham terrier",
+    "label_id": 190,
+    "sample_indices": [
+      243420,
+      242957,
+      242796,
+      243143,
+      243564
+    ]
+  },
+  "shed": {
+    "label_name": "mashed potato",
+    "label_id": 935,
+    "sample_indices": [
+      1197771,
+      1197967,
+      1197338,
+      1197298,
+      1197235
+    ]
+  },
+  "sheep": {
+    "label_name": "Old English sheepdog",
+    "label_id": 229,
+    "sample_indices": [
+      293738,
+      293595,
+      292842,
+      292717,
+      293809
+    ]
+  },
+  "shield": {
+    "label_name": "shield",
+    "label_id": 787,
+    "sample_indices": [
+      1008692,
+      1009440,
+      1008687,
+      1008567,
+      1008979
+    ]
+  },
+  "ship": {
+    "label_name": "airship",
+    "label_id": 405,
+    "sample_indices": [
+      520652,
+      519694,
+      520548,
+      520505,
+      519808
+    ]
+  },
+  "shirt": {
+    "label_name": "sweatshirt",
+    "label_id": 841,
+    "sample_indices": [
+      1077999,
+      1077891,
+      1077611,
+      1077815,
+      1077467
+    ]
+  },
+  "shovel": {
+    "label_name": "shovel",
+    "label_id": 792,
+    "sample_indices": [
+      1015050,
+      1015812,
+      1015811,
+      1015456,
+      1015983
+    ]
+  },
+  "skirt": {
+    "label_name": "hoopskirt",
+    "label_id": 601,
+    "sample_indices": [
+      771437,
+      771066,
+      771858,
+      771792,
+      771759
+    ]
+  },
+  "skunk": {
+    "label_name": "skunk",
+    "label_id": 361,
+    "sample_indices": [
+      463385,
+      463523,
+      463973,
+      462956,
+      464086
+    ]
+  },
+  "sled": {
+    "label_name": "bobsled",
+    "label_id": 450,
+    "sample_indices": [
+      578388,
+      578328,
+      578990,
+      578926,
+      578165
+    ]
+  },
+  "snail": {
+    "label_name": "snail",
+    "label_id": 113,
+    "sample_indices": [
+      146537,
+      146524,
+      147198,
+      147496,
+      146764
+    ]
+  },
+  "spatula": {
+    "label_name": "spatula",
+    "label_id": 813,
+    "sample_indices": [
+      1042005,
+      1042431,
+      1041350,
+      1041944,
+      1042215
+    ]
+  },
+  "spider": {
+    "label_name": "black and gold garden spider",
+    "label_id": 72,
+    "sample_indices": [
+      93890,
+      94085,
+      94204,
+      93587,
+      93414
+    ]
+  },
+  "spoon": {
+    "label_name": "spoonbill",
+    "label_id": 129,
+    "sample_indices": [
+      167896,
+      167771,
+      167325,
+      167877,
+      167402
+    ]
+  },
+  "squirrel": {
+    "label_name": "fox squirrel",
+    "label_id": 335,
+    "sample_indices": [
+      429478,
+      429770,
+      429261,
+      430102,
+      429576
+    ]
+  },
+  "stick": {
+    "label_name": "walking stick",
+    "label_id": 313,
+    "sample_indices": [
+      401537,
+      400866,
+      400999,
+      400906,
+      400590
+    ]
+  },
+  "stone": {
+    "label_name": "ruddy turnstone",
+    "label_id": 139,
+    "sample_indices": [
+      180774,
+      180388,
+      180398,
+      180405,
+      180460
+    ]
+  },
+  "stork": {
+    "label_name": "white stork",
+    "label_id": 127,
+    "sample_indices": [
+      164635,
+      164813,
+      165602,
+      165123,
+      165086
+    ]
+  },
+  "stove": {
+    "label_name": "stove",
+    "label_id": 827,
+    "sample_indices": [
+      1060076,
+      1059338,
+      1060032,
+      1059944,
+      1060333
+    ]
+  },
+  "strainer": {
+    "label_name": "strainer",
+    "label_id": 828,
+    "sample_indices": [
+      1061021,
+      1060931,
+      1061007,
+      1060487,
+      1060632
+    ]
+  },
+  "strawberry": {
+    "label_name": "strawberry",
+    "label_id": 949,
+    "sample_indices": [
+      1215340,
+      1215451,
+      1216148,
+      1215148,
+      1215136
+    ]
+  },
+  "submarine": {
+    "label_name": "submarine",
+    "label_id": 833,
+    "sample_indices": [
+      1067042,
+      1067568,
+      1067364,
+      1067006,
+      1067003
+    ]
+  },
+  "swan": {
+    "label_name": "black swan",
+    "label_id": 100,
+    "sample_indices": [
+      130231,
+      129907,
+      130267,
+      130470,
+      129694
+    ]
+  },
+  "sword": {
+    "label_name": "crossword puzzle",
+    "label_id": 918,
+    "sample_indices": [
+      1175561,
+      1175799,
+      1176003,
+      1175670,
+      1176420
+    ]
+  },
+  "table": {
+    "label_name": "dining table",
+    "label_id": 532,
+    "sample_indices": [
+      683720,
+      683287,
+      683381,
+      683766,
+      683772
+    ]
+  },
+  "tap": {
+    "label_name": "tape player",
+    "label_id": 848,
+    "sample_indices": [
+      1086351,
+      1087087,
+      1086397,
+      1087139,
+      1086233
+    ]
+  },
+  "telephone": {
+    "label_name": "cellular telephone",
+    "label_id": 487,
+    "sample_indices": [
+      626625,
+      625984,
+      625748,
+      626859,
+      626949
+    ]
+  },
+  "tent": {
+    "label_name": "mountain tent",
+    "label_id": 672,
+    "sample_indices": [
+      862921,
+      863422,
+      863311,
+      862610,
+      862873
+    ]
+  },
+  "thimble": {
+    "label_name": "thimble",
+    "label_id": 855,
+    "sample_indices": [
+      1096255,
+      1095627,
+      1095009,
+      1095256,
+      1095705
+    ]
+  },
+  "tie": {
+    "label_name": "bolo tie",
+    "label_id": 451,
+    "sample_indices": [
+      580197,
+      580442,
+      580267,
+      579702,
+      580321
+    ]
+  },
+  "tiger": {
+    "label_name": "tiger shark",
+    "label_id": 3,
+    "sample_indices": [
+      5093,
+      4991,
+      4302,
+      4857,
+      3917
+    ]
+  },
+  "toaster": {
+    "label_name": "toaster",
+    "label_id": 859,
+    "sample_indices": [
+      1100319,
+      1100325,
+      1100702,
+      1100157,
+      1100036
+    ]
+  },
+  "toilet": {
+    "label_name": "toilet seat",
+    "label_id": 861,
+    "sample_indices": [
+      1103541,
+      1102419,
+      1102747,
+      1102588,
+      1102890
+    ]
+  },
+  "toy": {
+    "label_name": "toy terrier",
+    "label_id": 158,
+    "sample_indices": [
+      204377,
+      204214,
+      204389,
+      204254,
+      204498
+    ]
+  },
+  "tractor": {
+    "label_name": "tractor",
+    "label_id": 866,
+    "sample_indices": [
+      1109182,
+      1109100,
+      1109127,
+      1109280,
+      1109024
+    ]
+  },
+  "trailer": {
+    "label_name": "trailer truck",
+    "label_id": 867,
+    "sample_indices": [
+      1110608,
+      1110428,
+      1111101,
+      1110418,
+      1110946
+    ]
+  },
+  "train": {
+    "label_name": "bullet train",
+    "label_id": 466,
+    "sample_indices": [
+      599012,
+      598843,
+      599644,
+      598786,
+      599430
+    ]
+  },
+  "tray": {
+    "label_name": "tray",
+    "label_id": 868,
+    "sample_indices": [
+      1111518,
+      1112185,
+      1112133,
+      1111947,
+      1111613
+    ]
+  },
+  "tricycle": {
+    "label_name": "tricycle",
+    "label_id": 870,
+    "sample_indices": [
+      1114009,
+      1114840,
+      1114011,
+      1113876,
+      1114064
+    ]
+  },
+  "tripod": {
+    "label_name": "tripod",
+    "label_id": 872,
+    "sample_indices": [
+      1117275,
+      1117616,
+      1117199,
+      1116847,
+      1116987
+    ]
+  },
+  "trolley": {
+    "label_name": "trolleybus",
+    "label_id": 874,
+    "sample_indices": [
+      1119722,
+      1119022,
+      1119668,
+      1119794,
+      1119141
+    ]
+  },
+  "trombone": {
+    "label_name": "trombone",
+    "label_id": 875,
+    "sample_indices": [
+      1120954,
+      1121269,
+      1120718,
+      1120359,
+      1120810
+    ]
+  },
+  "truck": {
+    "label_name": "garbage truck",
+    "label_id": 569,
+    "sample_indices": [
+      731689,
+      730938,
+      731267,
+      731400,
+      730578
+    ]
+  },
+  "turtle": {
+    "label_name": "leatherback turtle",
+    "label_id": 34,
+    "sample_indices": [
+      44200,
+      44459,
+      44309,
+      44341,
+      45083
+    ]
+  },
+  "typewriter": {
+    "label_name": "typewriter keyboard",
+    "label_id": 878,
+    "sample_indices": [
+      1124732,
+      1124713,
+      1124959,
+      1124296,
+      1125094
+    ]
+  },
+  "umbrella": {
+    "label_name": "umbrella",
+    "label_id": 879,
+    "sample_indices": [
+      1126686,
+      1126348,
+      1125737,
+      1126689,
+      1125803
+    ]
+  },
+  "unicycle": {
+    "label_name": "unicycle",
+    "label_id": 880,
+    "sample_indices": [
+      1126970,
+      1127051,
+      1126922,
+      1127784,
+      1127213
+    ]
+  },
+  "urn": {
+    "label_name": "ruddy turnstone",
+    "label_id": 139,
+    "sample_indices": [
+      181180,
+      180274,
+      180508,
+      180976,
+      180872
+    ]
+  },
+  "van": {
+    "label_name": "minivan",
+    "label_id": 656,
+    "sample_indices": [
+      842759,
+      842627,
+      842182,
+      842556,
+      842888
+    ]
+  },
+  "vest": {
+    "label_name": "harvestman",
+    "label_id": 70,
+    "sample_indices": [
+      91594,
+      91827,
+      91097,
+      90984,
+      91284
+    ]
+  },
+  "vine": {
+    "label_name": "vine snake",
+    "label_id": 59,
+    "sample_indices": [
+      76690,
+      76549,
+      77368,
+      77479,
+      77044
+    ]
+  },
+  "violin": {
+    "label_name": "violin",
+    "label_id": 889,
+    "sample_indices": [
+      1138270,
+      1138645,
+      1139453,
+      1138573,
+      1138389
+    ]
+  },
+  "vulture": {
+    "label_name": "vulture",
+    "label_id": 23,
+    "sample_indices": [
+      30388,
+      30927,
+      29941,
+      30039,
+      31175
+    ]
+  },
+  "wagon": {
+    "label_name": "beach wagon",
+    "label_id": 436,
+    "sample_indices": [
+      560667,
+      560545,
+      560299,
+      559802,
+      560984
+    ]
+  },
+  "wall": {
+    "label_name": "wallaby",
+    "label_id": 104,
+    "sample_indices": [
+      134880,
+      134875,
+      134597,
+      135188,
+      135336
+    ]
+  },
+  "whale": {
+    "label_name": "grey whale",
+    "label_id": 147,
+    "sample_indices": [
+      191391,
+      191416,
+      190928,
+      191212,
+      191331
+    ]
+  },
+  "wheel": {
+    "label_name": "car wheel",
+    "label_id": 479,
+    "sample_indices": [
+      616741,
+      616276,
+      616340,
+      616220,
+      616217
+    ]
+  },
+  "whip": {
+    "label_name": "whiptail",
+    "label_id": 41,
+    "sample_indices": [
+      53495,
+      54080,
+      54039,
+      53484,
+      54334
+    ]
+  },
+  "whistle": {
+    "label_name": "whistle",
+    "label_id": 902,
+    "sample_indices": [
+      1155903,
+      1155079,
+      1155364,
+      1155362,
+      1155486
+    ]
+  },
+  "worm": {
+    "label_name": "flatworm",
+    "label_id": 110,
+    "sample_indices": [
+      142543,
+      142545,
+      142938,
+      142882,
+      143125
+    ]
+  },
+  "zebra": {
+    "label_name": "zebra",
+    "label_id": 340,
+    "sample_indices": [
+      436436,
+      436744,
+      436561,
+      436022,
+      435916
+    ]
+  },
+  "zucchini": {
+    "label_name": "zucchini",
+    "label_id": 939,
+    "sample_indices": [
+      1202997,
+      1202970,
+      1202580,
+      1202996,
+      1202246
+    ]
+  }
+}

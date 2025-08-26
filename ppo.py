@@ -74,7 +74,8 @@ def train(num_iterations=1000, batch_size=2048, minibatch_size=64, num_epochs=4)
 
     agent_1 = agents.Agent_1()
     agent_2 = agents.Agent_2()
-    
+
+    done = false
     # create the rollout 
     for iter in range(num_iterations): 
         total_A1_loss = 0.0
