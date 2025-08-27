@@ -2,7 +2,7 @@ import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
 
-# from agents import AgnosticSender, Receiver, SenderCritic, ReceiverCritic
+import agents 
 import data 
 
 
@@ -72,10 +72,10 @@ def train(num_iterations=1000, batch_size=2048, minibatch_size=64, num_epochs=4)
     # load the data
     train_ds, val_ds, test_ds = data.load_coco_captions(data_dir="./data")
 
-    agent_1 = agents.Agent_1()
-    agent_2 = agents.Agent_2()
+    agent_1 = agents.AgentDummy()
+    agent_2 = agents.AgentDummy()
 
-    done = false
+    done = False
     # create the rollout 
     for iter in range(num_iterations): 
         total_A1_loss = 0.0
