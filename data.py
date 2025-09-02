@@ -71,10 +71,10 @@ def sample_and_embed_img(dataset, num_img=3, num_batches=5):
     return embeds
 
 
-def create_dummy_data(data_len, num_batches):
+def create_dummy_data(num_obj, num_batches):
     batch_list = []
     for _ in range(num_batches):
-        indices = tf.range(0, data_len, dtype=tf.int32)
+        indices = tf.range(0, num_obj, dtype=tf.int32)
         dummy_features = tf.one_hot(indices, depth=len(indices))
         batch_list.append(dummy_features)
     dummy_data = tf.convert_to_tensor(batch_list, dtype=tf.int32)
@@ -99,12 +99,10 @@ def assign_feats_to_agents(embeddings, num_same=2, num_diff1=2, num_diff2=2):
     mask_list = [tf.random.shuffle(base_mask) for _ in range(num_batches)]
     mask = tf.stack(mask_list)  # [num_batches, num_img]
 
-
     # Apply mask to create agent input
     agent1_feats = tf.where(mask[..., tf.newaxis] == 2,
                             tf.zeros_like(batch_feats),  # agent1 does not see diff2
                             batch_feats)
-   
     agent2_feats = tf.where(mask[..., tf.newaxis] == 1,
                             tf.zeros_like(batch_feats),  # agent2 does not see diff1
                             batch_feats)
@@ -170,7 +168,7 @@ def get_image_input():
     train_ds, val_ds, test_ds = load_coco_captions(data_dir="./data")
 
     features = sample_and_embed_img(train_ds, num_img=7, num_batches=5)
-    # features = create_dummy_data(data_len=7, num_batches=2)
+    # features = create_dummy_data(num_obj=7, num_batches=2)
 
     agent_1, agent_2, mask = assign_feats_to_agents(features, num_same=3, num_diff1=2, num_diff2=2)
 
