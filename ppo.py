@@ -66,18 +66,44 @@ import data
 #         "receiver_loss": receiver_loss,
 #         "receiver_crit_loss": receiver_crit_loss
 #     }
+def sender(agent,critic, features):
+    sender_probs = agent(features, role=tf.constant(0)) # output shape: (num_batches, vocab_size)
+    sender_vals = critic(features,role=tf.constant(0)) # output shape: (batch,)
+
+    sender_dist = tfp.distributions.Categorical(probs=sender_probs)
+    symbols = sender_dist.sample()       
+    symbols = tf.cast(symbols, tf.int32) 
+    sender_logps = sender_dist.log_prob(symbols)
+    return sender_logps, symbols
+
+def receiver(agent, critic, features, message):
+    receiver_probs = agent(features, role=tf.constant(1), input_message=message)
+    receiver_vals = critic(features, role=tf.constant(1), input_message=message)
+
+    receiver_dist = tfp.distributions.Categorical(probs=receiver_probs)
+
+    # next step, figure out what the response for the receiver is
+    # also, create the calc_reward function (I dunno what to do for that yet)
+    responses = tf.argmax(receiver_probs, axis=-1, output_type=tf.int64)
+    receiver_logps = receiver_dist.log_prob(responses)
+    # rewards = calc_reward(receiver_logps)
+    # rewards_list.extend(rewards.numpy())
+    return receiver_logps
 
 def train(num_iterations=1000, batch_size=2048, minibatch_size=64, num_epochs=4):
 
     # load the data
-    train_ds, val_ds, test_ds = data.load_coco_captions(data_dir="./data")
+    # train_ds, val_ds, test_ds = data.load_coco_captions(data_dir="./data")
 
     agent_1 = agents.AgentDummy()
     agent_2 = agents.AgentDummy()
 
+    critic_1 = agents.AgentDummyCritic()
+    critic_2 = agents.AgentDummyCritic()
     done = False
     # create the rollout 
     for iter in range(num_iterations): 
+        current_ts = 0
         total_A1_loss = 0.0
         total_A1_crit_loss = 0.0
         total_A2_loss = 0.0
@@ -87,18 +113,30 @@ def train(num_iterations=1000, batch_size=2048, minibatch_size=64, num_epochs=4)
 
         rewards_list = []
 
+        # images = data.sample_and_embed_img(train_ds, num_img=6, num_batches=5)
+        numbers = data.create_dummy_data(num_obj=16, num_batches=12)
 
-        target_feats, distractor_feats = [], []
+        feats_agent1, feats_agent2, assignment_mask = data.assign_feats_to_agents(numbers, num_same=8, num_diff1=4, num_diff2=4) # feats: shape=(num_batches, num_img, 2048), dtype=float32
+        feats_agent1_shuffled,_,_ = data.shuffle_features_and_targets(feats_agent1, assignment_mask)
+        feats_agent2_shuffled,_,_ = data.shuffle_features_and_targets(feats_agent2, assignment_mask)
+        # print(feats_agent1_shuffled)
 
-        imgs = data.sample_and_embed_img(train_ds, num_img=6)
-
-        feats_agent1, feats_agent2, assignment_mask = data.assign_feats_to_agents(imgs, batch_size=1, num_img=6, num_same=2, num_diff1=2, num_diff2=2) # feats: shape=(batch_size, num_img, 2048), dtype=float32
-
-        print("Features Agent 1: ", feats_agent1)
-        
         while not done:
-            sender =  "current sender depending on the timestep"
-            receiver = "current receiver depending on the timestep"
+            # print("current timestep: ", current_ts)
+            if current_ts%2==0:
+                sender_logps, symbols = sender(agent=agent_1, critic=critic_1, fatures=feats_agent1_shuffled)
+                receiver_logps = receiver(agent=agent_2, critic=critic_2, features=feats_agent2_shuffled, message=symbols)
+            else:
+                sender_logits, symbol = sender(agent_2, feats_agent2_shuffled)
+                receiver_logits = receiver(agent_1, feats_agent1_shuffled, symbol)
+
+            current_ts+=1
+            if current_ts>10:
+                break
+
+
+
+
             # sender_probs = sender(target_feats, distractor_feats)
             # sender_probs = tf.squeeze(sender_probs, axis=1) if sender_probs.shape.rank == 3 else sender_probs
             # sender_vals = sender_crit(target_feats, distractor_feats)
@@ -116,6 +154,7 @@ def train(num_iterations=1000, batch_size=2048, minibatch_size=64, num_epochs=4)
             # input_right = tf.where(swap[:, tf.newaxis], distractor_feats, target_feats)
             # correct_choice = tf.where(swap, tf.zeros((batch_size,), dtype=tf.int64),
             #                             tf.ones((batch_size,), dtype=tf.int64))
+
             # receiver_probs = receiver(input_left, input_right, symbols)
             # receiver_dist = tfp.distributions.Categorical(probs=receiver_probs)
 
