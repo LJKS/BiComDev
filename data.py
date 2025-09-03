@@ -122,16 +122,17 @@ def shuffle_features_and_targets(feature_tensor, mask):
     gather_idx = tf.stack([batch_idx, perms], axis=-1)
     shuffled_features = tf.gather_nd(feature_tensor, gather_idx)
 
+    shuffled_mask = tf.gather_nd(mask, gather_idx)
 
-    new_target_positions = []
-    for batch in range(num_batches):                          
-        perm = tf.cast(perms[batch], tf.int32)
-        orig_targets = tf.cast(tf.where(mask[batch] == 0)[:, 0], tf.int32)
+    # new_target_positions = []
+    # for batch in range(num_batches):                          
+    #     perm = tf.cast(perms[batch], tf.int32)
+    #     orig_targets = tf.cast(tf.where(mask[batch] == 0)[:, 0], tf.int32)
 
-        new_pos = tf.stack([tf.where(perm == t)[0][0] for t in orig_targets])
-        new_target_positions.append(new_pos)
+    #     new_pos = tf.stack([tf.where(perm == t)[0][0] for t in orig_targets])
+    #     new_target_positions.append(new_pos)
 
-    return shuffled_features, new_target_positions, perms
+    return shuffled_features, shuffled_mask #new_target_positions, perms
 
 
 # # example usage

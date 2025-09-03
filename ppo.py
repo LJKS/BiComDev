@@ -5,18 +5,6 @@ import tensorflow_probability as tfp
 import agents 
 import data 
 
-
-
-# sender = AgnosticSender()
-# receiver = Receiver()
-# sender_crit = SenderCritic()
-# receiver_crit = ReceiverCritic()
-
-# optimizer_sender = tf.keras.optimizers.Adam(1e-2) #1e-3
-# optimizer_receiver = tf.keras.optimizers.Adam(1e-2) #1e-3
-# optimizer_sender_crit = tf.keras.optimizers.Adam(1e-2) #1e-3
-# optimizer_receiver_crit = tf.keras.optimizers.Adam(1e-2) #1e-3
-
 # @tf.function
 # def train_step(target_feats, distractor_feats, input_left, input_right, symbols, responses, sender_logps, receiver_logps,  sender_advantages, receiver_advantages, rewards):    
 #     clip_epsilon = 0.2
@@ -74,21 +62,20 @@ def sender(agent,critic, features):
     symbols = sender_dist.sample()       
     symbols = tf.cast(symbols, tf.int32) 
     sender_logps = sender_dist.log_prob(symbols)
-    return sender_logps, symbols
+    return sender_logps, symbols, sender_vals
 
-def receiver(agent, critic, features, message):
+def receiver(agent, critic, features, mask, message):
     receiver_probs = agent(features, role=tf.constant(1), input_message=message)
     receiver_vals = critic(features, role=tf.constant(1), input_message=message)
 
-    receiver_dist = tfp.distributions.Categorical(probs=receiver_probs)
+    pred = tf.cast(receiver_probs > 0.5, tf.int32)
 
-    # next step, figure out what the response for the receiver is
-    # also, create the calc_reward function (I dunno what to do for that yet)
-    responses = tf.argmax(receiver_probs, axis=-1, output_type=tf.int64)
-    receiver_logps = receiver_dist.log_prob(responses)
-    # rewards = calc_reward(receiver_logps)
-    # rewards_list.extend(rewards.numpy())
-    return receiver_logps
+    # normalized by target_num to avoid reward inflation from higher number of targets
+    target_mask = tf.cast(tf.equal(mask, 0), tf.float32)
+    num_targets = tf.reduce_sum(target_mask, axis=-1)
+    reward = tf.reduce_sum(receiver_probs * target_mask, axis=-1) / (num_targets + 1e-8)
+
+    return pred, reward, receiver_vals
 
 def train(num_iterations=1000, batch_size=2048, minibatch_size=64, num_epochs=4):
 
@@ -100,9 +87,18 @@ def train(num_iterations=1000, batch_size=2048, minibatch_size=64, num_epochs=4)
 
     critic_1 = agents.AgentDummyCritic()
     critic_2 = agents.AgentDummyCritic()
+
+    optimizer_agent_1 = tf.keras.optimizers.Adam(1e-2) #1e-3
+    optimizer_agent_2 = tf.keras.optimizers.Adam(1e-2) #1e-3
+    optimizer_crit_1 = tf.keras.optimizers.Adam(1e-2) #1e-3
+    optimizer_crit_2 = tf.keras.optimizers.Adam(1e-2) #1e-3
+
+
     done = False
+
     # create the rollout 
     for iter in range(num_iterations): 
+
         current_ts = 0
         total_A1_loss = 0.0
         total_A1_crit_loss = 0.0
@@ -114,59 +110,40 @@ def train(num_iterations=1000, batch_size=2048, minibatch_size=64, num_epochs=4)
         rewards_list = []
 
         # images = data.sample_and_embed_img(train_ds, num_img=6, num_batches=5)
-        numbers = data.create_dummy_data(num_obj=16, num_batches=12)
+        numbers = data.create_dummy_data(num_obj=15, num_batches=12)
 
-        feats_agent1, feats_agent2, assignment_mask = data.assign_feats_to_agents(numbers, num_same=8, num_diff1=4, num_diff2=4) # feats: shape=(num_batches, num_img, 2048), dtype=float32
-        feats_agent1_shuffled,_,_ = data.shuffle_features_and_targets(feats_agent1, assignment_mask)
-        feats_agent2_shuffled,_,_ = data.shuffle_features_and_targets(feats_agent2, assignment_mask)
+        feats_agent1, feats_agent2, assignment_mask = data.assign_feats_to_agents(numbers, num_same=1, num_diff1=7, num_diff2=7) # feats: shape=(num_batches, num_img, 2048), dtype=float32
+        feats_agent1_shuffled, shuffled_mask1= data.shuffle_features_and_targets(feats_agent1, assignment_mask)
+        feats_agent2_shuffled, shuffled_mask2 = data.shuffle_features_and_targets(feats_agent2, assignment_mask)
         # print(feats_agent1_shuffled)
 
         while not done:
             # print("current timestep: ", current_ts)
             if current_ts%2==0:
-                sender_logps, symbols = sender(agent=agent_1, critic=critic_1, fatures=feats_agent1_shuffled)
-                receiver_logps = receiver(agent=agent_2, critic=critic_2, features=feats_agent2_shuffled, message=symbols)
+                sender_logps, symbols, sender_vals = sender(agent=agent_1, critic=critic_1, features=feats_agent1_shuffled)
+                receiver_preds, rewards, receiver_vals = receiver(agent=agent_2, 
+                                                                critic=critic_2, 
+                                                                features=feats_agent2_shuffled, 
+                                                                mask=shuffled_mask1, 
+                                                                message=symbols)
             else:
-                sender_logits, symbol = sender(agent_2, feats_agent2_shuffled)
-                receiver_logits = receiver(agent_1, feats_agent1_shuffled, symbol)
+                sender_logps, symbols, sender_vals = sender(agent=agent_2, critic=critic_2, features=feats_agent2_shuffled)
+                receiver_preds, rewards, receiver_vals = receiver(agent=agent_2, 
+                                                                critic=critic_2, 
+                                                                features=feats_agent2_shuffled, 
+                                                                mask=shuffled_mask1, 
+                                                                message=symbols)
+
+            print("Sender logps: ", sender_logps)
+            print("rewards: ", rewards)
 
             current_ts+=1
             if current_ts>10:
                 break
-
-
-
-
-            # sender_probs = sender(target_feats, distractor_feats)
-            # sender_probs = tf.squeeze(sender_probs, axis=1) if sender_probs.shape.rank == 3 else sender_probs
-            # sender_vals = sender_crit(target_feats, distractor_feats)
-            # sender_vals = tf.squeeze(sender_vals, axis=-1)
-            # sender_dist = tfp.distributions.Categorical(probs=sender_probs)
-            # symbols = sender_dist.sample()       
-            # symbols = tf.cast(symbols, tf.int32) 
-            # sender_logps = sender_dist.log_prob(symbols)
-            # # print("Sender_logps", sender_logps.shape)
-
-            # swap = tf.random.uniform((batch_size,)) < 0.5
-            # target_feats = tf.squeeze(target_feats) # shape (B, 4096)
-            # distractor_feats = tf.squeeze(distractor_feats) # shape (B, 4096)
-            # input_left = tf.where(swap[:, tf.newaxis], target_feats, distractor_feats)
-            # input_right = tf.where(swap[:, tf.newaxis], distractor_feats, target_feats)
-            # correct_choice = tf.where(swap, tf.zeros((batch_size,), dtype=tf.int64),
-            #                             tf.ones((batch_size,), dtype=tf.int64))
-
-            # receiver_probs = receiver(input_left, input_right, symbols)
-            # receiver_dist = tfp.distributions.Categorical(probs=receiver_probs)
-
-            # receiver_vals = receiver_crit(input_left, input_right, symbols)
-            # responses = tf.argmax(receiver_probs, axis=-1, output_type=tf.int64)
-            # receiver_logps = receiver_dist.log_prob(responses)
-            # rewards = tf.cast(tf.equal(responses, correct_choice), tf.float32)  # (B,)
-            # rewards_list.extend(rewards.numpy())
-
             
-            # sender_advantages = rewards - sender_vals
-            # receiver_advantages = rewards - receiver_vals
+            
+            sender_advantages = rewards - sender_vals
+            receiver_advantages = rewards - receiver_vals
 
             # dataset = tf.data.Dataset.from_tensor_slices((target_feats, distractor_feats, input_left, input_right, symbols, responses, sender_logps, receiver_logps, sender_advantages, receiver_advantages, rewards))
             # dataset = dataset.shuffle(batch_size).batch(minibatch_size)
