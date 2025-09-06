@@ -24,23 +24,38 @@ class AgentDummy(tf.keras.Model):
         self.embed_symbol = tf.keras.layers.Embedding(input_dim=vocab_size, output_dim=embed_dim)
 
 
-    def call(self, feature_vector, role, input_message=None):
+    def call(self, feature_vector, input_message=None):
         
-        def sender_fn():
+        # def sender_fn():
+        #     img_emb = self.embed_img(feature_vector)
+        #     pooled = tf.reduce_mean(img_emb, axis=1)  # attention pooling could go here later
+        #     logits = self.vocab_logits(pooled)
+        #     return tf.nn.softmax(logits / self.temperature)
+
+        # def receiver_fn():
+        #     img_emb = self.embed_img(feature_vector)  
+        #     msg_emb = self.embed_symbol(input_message) 
+        #     msg_emb = tf.expand_dims(msg_emb, axis=1)   
+
+        #     dot = tf.reduce_sum(img_emb * msg_emb, axis=-1)  
+        #     return tf.nn.sigmoid(dot) # tf.nn.softmax(dot / self.temperature)
+        
+        def combined():
             img_emb = self.embed_img(feature_vector)
             pooled = tf.reduce_mean(img_emb, axis=1)  # attention pooling could go here later
             logits = self.vocab_logits(pooled)
-            return tf.nn.softmax(logits / self.temperature)
+            logits_sm = tf.nn.softmax(logits / self.temperature)
 
-        def receiver_fn():
-            img_emb = self.embed_img(feature_vector)  
             msg_emb = self.embed_symbol(input_message) 
             msg_emb = tf.expand_dims(msg_emb, axis=1)   
 
             dot = tf.reduce_sum(img_emb * msg_emb, axis=-1)  
-            return tf.nn.sigmoid(dot) # tf.nn.softmax(dot / self.temperature)
+            dot_sig = tf.nn.sigmoid(dot) # tf.nn.softmax(dot / self.temperature)
 
-        return tf.cond(tf.equal(role, 0), sender_fn, receiver_fn)
+            return logits_sm, dot_sig
+
+        return combined()
+        # return tf.cond(tf.equal(role, 0), sender_fn, receiver_fn)
 
 class AgentDummyCritic(tf.keras.Model):
     def __init__(self, embed_dim=50, vocab_size=10):
@@ -50,22 +65,32 @@ class AgentDummyCritic(tf.keras.Model):
         self.value_head = tf.keras.layers.Dense(1)
         self.value_head_receiver = tf.keras.layers.Dense(1)  # for receiver
 
-    def call(self, feature_tensor,role, input_message=None):
+    def call(self, feature_tensor, input_message=None):
 
-        def sender_crit_fn():
-            img_emb = self.embed_img(feature_tensor)
-            pooled = tf.reduce_mean(img_emb, axis=1) 
-            value = tf.squeeze(self.value_head(pooled), axis=-1)
-            return value
+        img_emb = self.embed_img(feature_tensor)
+        pooled = tf.reduce_mean(img_emb, axis=1)
+        val_img = tf.squeeze(self.value_head(pooled), axis=-1)
 
-        def receiver_crit_fn():
-            img_emb = self.embed_img(feature_tensor)       
-            pooled = tf.reduce_mean(img_emb, axis=1)       
-            msg_emb = self.embed_symbol(input_message)     
-            h = tf.concat([pooled, msg_emb], axis=-1)     
-            value = tf.squeeze(self.value_head_receiver(h), axis=-1)
-            return value
+        msg_emb = self.embed_symbol(input_message)
+        h = tf.concat([pooled, msg_emb], axis=-1)
+        val_msg = tf.squeeze(self.value_head_receiver(h), axis=-1)
 
-        return tf.cond(tf.equal(role, 0), sender_crit_fn, receiver_crit_fn)
+        return val_img, val_msg
+    
+        # def sender_crit_fn():
+        #     img_emb = self.embed_img(feature_tensor)
+        #     pooled = tf.reduce_mean(img_emb, axis=1) 
+        #     value = tf.squeeze(self.value_head(pooled), axis=-1)
+        #     return value
+
+        # def receiver_crit_fn():
+        #     img_emb = self.embed_img(feature_tensor)       
+        #     pooled = tf.reduce_mean(img_emb, axis=1)       
+        #     msg_emb = self.embed_symbol(input_message)     
+        #     h = tf.concat([pooled, msg_emb], axis=-1)     
+        #     value = tf.squeeze(self.value_head_receiver(h), axis=-1)
+        #     return value
+
+        # return tf.cond(tf.equal(role, 0), sender_crit_fn, receiver_crit_fn)
 
 

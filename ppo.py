@@ -77,6 +77,26 @@ def receiver(agent, critic, features, mask, message):
 
     return pred, reward, receiver_vals
 
+
+def combined(agent, critic, features, mask, message):
+    probs_img, probs_msg = agent(features, message)
+    vals_img, vals_msg = critic(features, message)
+
+    pred = tf.cast(probs_msg > 0.5, tf.int32)    
+    img_dist = tfp.distributions.Categorical(probs=probs_img)
+    symbols = img_dist.sample()       
+    symbols = tf.cast(symbols, tf.int32) 
+    img_logps = img_dist.log_prob(symbols)
+
+    # normalized by target_num to avoid reward inflation from higher number of targets
+    target_mask = tf.cast(tf.equal(mask, 0), tf.float32)
+    num_targets = tf.reduce_sum(target_mask, axis=-1)
+    reward = tf.reduce_sum(probs_msg * target_mask, axis=-1) / (num_targets + 1e-8)
+
+
+    print("rewards: ", reward)
+    print("img logps: ", img_logps)
+
 def train(num_iterations=1000, batch_size=2048, minibatch_size=64, num_epochs=4):
 
     # load the data
@@ -109,41 +129,50 @@ def train(num_iterations=1000, batch_size=2048, minibatch_size=64, num_epochs=4)
 
         rewards_list = []
 
+        num_batches = 12
+        num_obj = 15
         # images = data.sample_and_embed_img(train_ds, num_img=6, num_batches=5)
-        numbers = data.create_dummy_data(num_obj=15, num_batches=12)
+        numbers = data.create_dummy_data(num_obj=num_obj, num_batches=num_batches)
 
         feats_agent1, feats_agent2, assignment_mask = data.assign_feats_to_agents(numbers, num_same=1, num_diff1=7, num_diff2=7) # feats: shape=(num_batches, num_img, 2048), dtype=float32
         feats_agent1_shuffled, shuffled_mask1= data.shuffle_features_and_targets(feats_agent1, assignment_mask)
         feats_agent2_shuffled, shuffled_mask2 = data.shuffle_features_and_targets(feats_agent2, assignment_mask)
         # print(feats_agent1_shuffled)
 
-        while not done:
-            # print("current timestep: ", current_ts)
-            if current_ts%2==0:
-                sender_logps, symbols, sender_vals = sender(agent=agent_1, critic=critic_1, features=feats_agent1_shuffled)
-                receiver_preds, rewards, receiver_vals = receiver(agent=agent_2, 
-                                                                critic=critic_2, 
-                                                                features=feats_agent2_shuffled, 
-                                                                mask=shuffled_mask1, 
-                                                                message=symbols)
-            else:
-                sender_logps, symbols, sender_vals = sender(agent=agent_2, critic=critic_2, features=feats_agent2_shuffled)
-                receiver_preds, rewards, receiver_vals = receiver(agent=agent_2, 
-                                                                critic=critic_2, 
-                                                                features=feats_agent2_shuffled, 
-                                                                mask=shuffled_mask1, 
-                                                                message=symbols)
+        # initial message for both agents
+        message = tf.zeros([num_batches], dtype=tf.int32)
 
-            print("Sender logps: ", sender_logps)
-            print("rewards: ", rewards)
+        while not done:
+            # # print("current timestep: ", current_ts)
+
+            combined(agent_1, critic_1, feats_agent1_shuffled, shuffled_mask1, message)
+
+
+            # if current_ts%2==0:
+            #     sender_logps, symbols, sender_vals = sender(agent=agent_1, critic=critic_1, features=feats_agent1_shuffled)
+            #     receiver_preds, rewards, receiver_vals = receiver(agent=agent_2, 
+            #                                                     critic=critic_2, 
+            #                                                     features=feats_agent2_shuffled, 
+            #                                                     mask=shuffled_mask1, 
+            #                                                     message=symbols)
+            # else:
+            #     sender_logps, symbols, sender_vals = sender(agent=agent_2, critic=critic_2, features=feats_agent2_shuffled)
+            #     receiver_preds, rewards, receiver_vals = receiver(agent=agent_2, 
+            #                                                     critic=critic_2, 
+            #                                                     features=feats_agent2_shuffled, 
+            #                                                     mask=shuffled_mask1, 
+            #                                                     message=symbols)
+
+            # print("Sender logps: ", sender_logps)
+            # print("rewards: ", rewards)
 
             current_ts+=1
             if current_ts>10:
                 break
             
             
-            sender_advantages = rewards - sender_vals
-            receiver_advantages = rewards - receiver_vals
+            # sender_advantages = rewards - sender_vals
+            # receiver_advantages = rewards - receiver_vals
 
             # dataset = tf.data.Dataset.from_tensor_slices((target_feats, distractor_feats, input_left, input_right, symbols, responses, sender_logps, receiver_logps, sender_advantages, receiver_advantages, rewards))
             # dataset = dataset.shuffle(batch_size).batch(minibatch_size)
