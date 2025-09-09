@@ -94,21 +94,10 @@ def combined(agent, critic, features, mask, message):
     # normalized by target_num to avoid reward inflation from higher number of targets
     target_mask = tf.cast(tf.equal(mask, 0), tf.float32)
     num_targets = tf.reduce_sum(target_mask, axis=-1) + 1e-8
-    # rewards = tf.reduce_sum(probs_msg * target_mask, axis=-1) / (num_targets + 1e-8)
     correct = tf.reduce_sum(preds * target_mask, axis=-1)  
     rewards = correct / (num_targets + 1e-8)       
 
-
     joint_logps = tf.reduce_sum(img_logps, axis=-1) + tf.reduce_sum(msg_logps, axis=-1)
-
-
-    # print("symbols: ", symbols)
-    # print("rewards: ", rewards)
-    # print("img logps: ", img_logps)
-    # print("msg logps: ", msg_logps)
-    # print("joint logps: ", joint_logps)
-
-    # (img_probs, msg_probs, symbols, preds, joint_logps, rewards, img_vals, mg_vals)
 
     return symbols, preds, img_logps, msg_logps, joint_logps, rewards, vals
 
@@ -197,11 +186,24 @@ def train(num_iterations=1000, batch_size=2048, minibatch_size=64, num_epochs=4)
         # print(feats_agent1_shuffled)
 
         # initial message for both agents
-        message_to_a1 = tf.zeros([batch_size], dtype=tf.int32)
-        message_to_a2 = tf.zeros([batch_size], dtype=tf.int32)
+        # message_to_a1 = tf.zeros([batch_size], dtype=tf.int32)
+        # message_to_a2 = tf.zeros([batch_size], dtype=tf.int32)
 
         for current_ts in tf.range(max_steps):
 
+            message_to_a1 = tf.cond(
+                tf.equal(current_ts, 0),
+                lambda: tf.zeros([batch_size], dtype=tf.int32),  
+                lambda: ta_a2_symbols.read(current_ts-1)
+            )
+
+            message_to_a2 = tf.cond(
+                tf.equal(current_ts, 0),
+                lambda: tf.zeros([batch_size], dtype=tf.int32),  
+                lambda: ta_a1_symbols.read(current_ts-1)
+            )
+            print(message_to_a1)
+            
             a1_symbols, a1_preds, a1_img_logps, a1_msg_logps, a1_joint_logps, a1_rewards, a1_vals = combined(agent_1, critic_1, feats_agent1_shuffled, shuffled_mask1, message_to_a1)
             a2_symbols, a2_preds, a2_img_logps, a2_msg_logps, a2_joint_logps, a2_rewards, a2_vals= combined(agent_2, critic_2, feats_agent2_shuffled, shuffled_mask2, message_to_a2)
 
@@ -278,13 +280,13 @@ def train(num_iterations=1000, batch_size=2048, minibatch_size=64, num_epochs=4)
         # print("vals shape after stack: ", all_a2_vals.shape)
         
 
-        # print("rewards list: ", all_a1_rewards)
-        # all_a1_rewards = tf.convert_to_tensor(all_a1_rewards, dtype=tf.float32)
-        # # print("rewards shape", all_a1_rewards.shape)
-        # all_a1_vals = tf.convert_to_tensor(all_a1_vals, dtype=tf.float32)
-        # last_val = all_a1_vals[:, -1]
-        # all_a1_vals = tf.concat([all_a1_vals, last_val[:, None]], axis=1)
 
+        # final_state = feats_agent1_shuffled[:, -1, :]  # (B, feature_dim)
+        # print(final_state)
+        # last_message_to_a1 = all_a2_symbols[:,-1]
+        # print(last_message_to_a1)
+        # last_val = critic_1(final_state,last_message_to_a1)
+        # all_a1_vals = tf.concat([all_a1_vals, last_val[:, None]], axis=1)  # (B, T+1)
         # returns_a1, advs_a1 = compute_gae(all_a1_rewards, all_a1_vals)
         # print("returns_a1: ", returns_a1)
         # print("Advantages a1: ", advs_a1)
