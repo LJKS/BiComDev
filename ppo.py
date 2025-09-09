@@ -55,7 +55,7 @@ import data
 #         "receiver_crit_loss": receiver_crit_loss
 #     }
 def sender(agent,critic, features):
-    sender_probs = agent(features, role=tf.constant(0)) # output shape: (num_batches, vocab_size)
+    sender_probs = agent(features, role=tf.constant(0)) # output shape: (batch_size, vocab_size)
     sender_vals = critic(features,role=tf.constant(0)) # output shape: (batch,)
 
     sender_dist = tfp.distributions.Categorical(probs=sender_probs)
@@ -80,22 +80,56 @@ def receiver(agent, critic, features, mask, message):
 
 def combined(agent, critic, features, mask, message):
     probs_img, probs_msg = agent(features, message)
-    vals_img, vals_msg = critic(features, message)
+    vals = critic(features, message)
 
-    pred = tf.cast(probs_msg > 0.5, tf.int32)    
     img_dist = tfp.distributions.Categorical(probs=probs_img)
-    symbols = img_dist.sample()       
-    symbols = tf.cast(symbols, tf.int32) 
-    img_logps = img_dist.log_prob(symbols)
+    symbols = img_dist.sample() # (B,)
+    img_logps = img_dist.log_prob(symbols) # (B,)
 
+    msg_dist = tfp.distributions.Bernoulli(probs=probs_msg)
+    preds = msg_dist.sample()
+    msg_logps = msg_dist.log_prob(preds)
+
+    preds = tf.cast(preds, dtype=tf.float32)
     # normalized by target_num to avoid reward inflation from higher number of targets
     target_mask = tf.cast(tf.equal(mask, 0), tf.float32)
-    num_targets = tf.reduce_sum(target_mask, axis=-1)
-    reward = tf.reduce_sum(probs_msg * target_mask, axis=-1) / (num_targets + 1e-8)
+    num_targets = tf.reduce_sum(target_mask, axis=-1) + 1e-8
+    # rewards = tf.reduce_sum(probs_msg * target_mask, axis=-1) / (num_targets + 1e-8)
+    correct = tf.reduce_sum(preds * target_mask, axis=-1)  
+    rewards = correct / (num_targets + 1e-8)       
 
 
-    print("rewards: ", reward)
-    print("img logps: ", img_logps)
+    joint_logps = tf.reduce_sum(img_logps, axis=-1) + tf.reduce_sum(msg_logps, axis=-1)
+
+
+    # print("symbols: ", symbols)
+    # print("rewards: ", rewards)
+    # print("img logps: ", img_logps)
+    # print("msg logps: ", msg_logps)
+    # print("joint logps: ", joint_logps)
+
+    # (img_probs, msg_probs, symbols, preds, joint_logps, rewards, img_vals, mg_vals)
+
+    return symbols, preds, img_logps, msg_logps, joint_logps, rewards, vals
+
+def compute_gae(rewards, values, gamma=0.99, lam=0.95):
+
+    batch_size = tf.shape(rewards)[0]
+    total_timesteps = tf.shape(rewards)[1]
+
+    advs = tf.TensorArray(tf.float32, size=total_timesteps)
+    gae = tf.zeros((batch_size,), dtype=tf.float32)
+
+    for t in tf.range(total_timesteps - 1, -1, -1):  # loop backwards
+        delta = rewards[:, t] + gamma * values[:, t+1] - values[:, t]
+        gae = delta + gamma * lam * gae
+        advs = advs.write(t, gae)
+
+    advs = tf.transpose(advs.stack(), [1, 0])   # (B, T)
+    returns = advs + values[:, :-1]             # (B, T)
+
+    return returns, advs
+
 
 def train(num_iterations=1000, batch_size=2048, minibatch_size=64, num_epochs=4):
 
@@ -127,52 +161,138 @@ def train(num_iterations=1000, batch_size=2048, minibatch_size=64, num_epochs=4)
 
         total_minibatches = 0
 
-        rewards_list = []
+        
+        max_steps = 10
 
-        num_batches = 12
+        # all_a1_symbols, all_a1_preds, all_a1_img_logps, all_a1_msg_logps, all_a1_joint_logps, all_a1_rewards, all_a1_vals = [],[],[],[],[],[],[]
+        # all_a2_symbols, all_a2_preds, all_a2_img_logps, all_a2_msg_logps, all_a2_joint_logps, all_a2_rewards, all_a2_vals = [],[],[],[],[],[],[]
+        
+        # tensor array setup for agent 1
+        ta_a1_symbols = tf.TensorArray(tf.int32, size=max_steps)
+        ta_a1_preds = tf.TensorArray(tf.float32, size=max_steps)
+        ta_a1_img_logps = tf.TensorArray(tf.float32, size=max_steps)
+        ta_a1_msg_logps = tf.TensorArray(tf.float32, size=max_steps)
+        ta_a1_joint_logps = tf.TensorArray(tf.float32, size=max_steps)
+        ta_a1_rewards = tf.TensorArray(tf.float32, size=max_steps)
+        ta_a1_vals = tf.TensorArray(tf.float32, size=max_steps)
+
+        # tensor array setup for agent 2
+        ta_a2_symbols = tf.TensorArray(tf.int32, size=max_steps)
+        ta_a2_preds = tf.TensorArray(tf.float32, size=max_steps)
+        ta_a2_img_logps = tf.TensorArray(tf.float32, size=max_steps)
+        ta_a2_msg_logps = tf.TensorArray(tf.float32, size=max_steps)
+        ta_a2_joint_logps = tf.TensorArray(tf.float32, size=max_steps)
+        ta_a2_rewards = tf.TensorArray(tf.float32, size=max_steps)
+        ta_a2_vals = tf.TensorArray(tf.float32, size=max_steps)
+
+        batch_size = 12
         num_obj = 15
-        # images = data.sample_and_embed_img(train_ds, num_img=6, num_batches=5)
-        numbers = data.create_dummy_data(num_obj=num_obj, num_batches=num_batches)
 
-        feats_agent1, feats_agent2, assignment_mask = data.assign_feats_to_agents(numbers, num_same=1, num_diff1=7, num_diff2=7) # feats: shape=(num_batches, num_img, 2048), dtype=float32
+        # images = data.sample_and_embed_img(train_ds, num_img=6, batch_size=5)
+        numbers = data.create_dummy_data(num_obj=num_obj, batch_size=batch_size)
+
+        feats_agent1, feats_agent2, assignment_mask = data.assign_feats_to_agents(numbers, num_same=1, num_diff1=7, num_diff2=7) # feats: shape=(batch_size, num_img, 2048), dtype=float32
         feats_agent1_shuffled, shuffled_mask1= data.shuffle_features_and_targets(feats_agent1, assignment_mask)
         feats_agent2_shuffled, shuffled_mask2 = data.shuffle_features_and_targets(feats_agent2, assignment_mask)
         # print(feats_agent1_shuffled)
 
         # initial message for both agents
-        message = tf.zeros([num_batches], dtype=tf.int32)
+        message_to_a1 = tf.zeros([batch_size], dtype=tf.int32)
+        message_to_a2 = tf.zeros([batch_size], dtype=tf.int32)
 
-        while not done:
-            # # print("current timestep: ", current_ts)
+        for current_ts in tf.range(max_steps):
 
-            combined(agent_1, critic_1, feats_agent1_shuffled, shuffled_mask1, message)
+            a1_symbols, a1_preds, a1_img_logps, a1_msg_logps, a1_joint_logps, a1_rewards, a1_vals = combined(agent_1, critic_1, feats_agent1_shuffled, shuffled_mask1, message_to_a1)
+            a2_symbols, a2_preds, a2_img_logps, a2_msg_logps, a2_joint_logps, a2_rewards, a2_vals= combined(agent_2, critic_2, feats_agent2_shuffled, shuffled_mask2, message_to_a2)
 
+            ta_a1_symbols = ta_a1_symbols.write(current_ts, a1_symbols)
+            ta_a1_preds = ta_a1_preds.write(current_ts, a1_preds)
+            ta_a1_img_logps = ta_a1_img_logps.write(current_ts, a1_img_logps)
+            ta_a1_msg_logps = ta_a1_msg_logps.write(current_ts, a1_msg_logps)
+            ta_a1_joint_logps = ta_a1_joint_logps.write(current_ts, a1_joint_logps)
+            ta_a1_rewards = ta_a1_rewards.write(current_ts, a1_rewards)
+            ta_a1_vals = ta_a1_vals.write(current_ts, a1_vals)
 
-            # if current_ts%2==0:
-            #     sender_logps, symbols, sender_vals = sender(agent=agent_1, critic=critic_1, features=feats_agent1_shuffled)
-            #     receiver_preds, rewards, receiver_vals = receiver(agent=agent_2, 
-            #                                                     critic=critic_2, 
-            #                                                     features=feats_agent2_shuffled, 
-            #                                                     mask=shuffled_mask1, 
-            #                                                     message=symbols)
-            # else:
-            #     sender_logps, symbols, sender_vals = sender(agent=agent_2, critic=critic_2, features=feats_agent2_shuffled)
-            #     receiver_preds, rewards, receiver_vals = receiver(agent=agent_2, 
-            #                                                     critic=critic_2, 
-            #                                                     features=feats_agent2_shuffled, 
-            #                                                     mask=shuffled_mask1, 
-            #                                                     message=symbols)
-
-            # print("Sender logps: ", sender_logps)
-            # print("rewards: ", rewards)
-
-            current_ts+=1
-            if current_ts>10:
-                break
+            ta_a2_symbols = ta_a2_symbols.write(current_ts, a2_symbols)
+            ta_a2_preds = ta_a2_preds.write(current_ts, a2_preds)
+            ta_a2_img_logps = ta_a2_img_logps.write(current_ts, a2_img_logps)
+            ta_a2_msg_logps = ta_a2_msg_logps.write(current_ts, a2_msg_logps)
+            ta_a2_joint_logps = ta_a2_joint_logps.write(current_ts, a2_joint_logps)
+            ta_a2_rewards = ta_a2_rewards.write(current_ts, a2_rewards)
+            ta_a2_vals = ta_a2_vals.write(current_ts, a2_vals)
             
+
+        # stacking array from rollout - Agent 1    
+        all_a1_symbols = ta_a1_symbols.stack()          # shape: (total_timesteps, batch_size)
+        all_a1_preds = ta_a1_preds.stack()              # shape: (total_timesteps, batch_size, num_obj)
+        all_a1_img_logps = ta_a1_img_logps.stack()      # shape: (total_timesteps, batch_size)
+        all_a1_msg_logps = ta_a1_msg_logps.stack()      # shape: (total_timesteps, batch_size, num_obj)
+        all_a1_joint_logps = ta_a1_joint_logps.stack()  # shape: (total_timesteps, batch_size)
+        all_a1_rewards = ta_a1_rewards.stack()          # shape: (total_timesteps, batch_size)
+        all_a1_vals = ta_a1_vals.stack()                # shape: (total_timesteps, batch_size)
+
+        # transposing to restore batch_size as first 
+        all_a1_symbols = tf.transpose(all_a1_symbols, [1,0])            # shape: (batch_size, total_timesteps)
+        all_a1_preds = tf.transpose(all_a1_preds, [1,0,2])              # shape: (batch_size, total_timesteps, num_obj)
+        all_a1_img_logps = tf.transpose(all_a1_img_logps, [1,0])        # shape: (batch_size, total_timesteps)
+        all_a1_msg_logps = tf.transpose(all_a1_msg_logps, [1,0,2])      # shape: (batch_size, total_timesteps, num_obj)
+        all_a1_joint_logps = tf.transpose(all_a1_joint_logps, [1,0])    # shape: (batch_size, total_timesteps)
+        all_a1_rewards = tf.transpose(all_a1_rewards, [1,0])            # shape: (batch_size, total_timesteps)
+        all_a1_vals = tf.transpose(all_a1_vals, [1,0])                  # shape: (batch_size, total_timesteps)
+
+        # print("symbols shape after stack: ", all_a1_symbols.shape)
+        # print("preds shape after stack: ", all_a1_preds.shape)
+        # print(" img_logps shape after stack: ", all_a1_img_logps.shape)
+        # print(" msg_logps shape after stack: ", all_a1_msg_logps.shape)
+        # print(" joint_logps shape after stack: ", all_a1_joint_logps.shape)
+        # print("rewards shape after stack: ", all_a1_rewards.shape)
+        # print("vals shape after stack: ", all_a1_vals.shape)
+        
+
+        # stacking array from rollout - Agent 2 
+        all_a2_symbols = ta_a2_symbols.stack()      
+        all_a2_preds = ta_a2_preds.stack()
+        all_a2_img_logps = ta_a2_img_logps.stack()
+        all_a2_msg_logps = ta_a2_msg_logps.stack()
+        all_a2_joint_logps = ta_a2_joint_logps.stack()
+        all_a2_rewards = ta_a2_rewards.stack()     
+        all_a2_vals = ta_a2_vals.stack()  
+
+
+        # transposing to restore batch_size as first 
+        all_a2_symbols = tf.transpose(all_a2_symbols, [1,0])
+        all_a2_preds = tf.transpose(all_a2_preds, [1,0,2])
+        all_a2_img_logps = tf.transpose(all_a2_img_logps, [1,0])
+        all_a2_msg_logps = tf.transpose(all_a2_msg_logps, [1,0,2])
+        all_a2_joint_logps = tf.transpose(all_a2_joint_logps, [1,0])
+        all_a2_rewards = tf.transpose(all_a2_rewards, [1,0])  
+        all_a2_vals = tf.transpose(all_a2_vals, [1,0])
+
+
+        # print("symbols shape after stack: ", all_a2_symbols.shape)
+        # print("preds shape after stack: ", all_a2_preds.shape)
+        # print(" img_logps shape after stack: ", all_a2_img_logps.shape)
+        # print(" msg_logps shape after stack: ", all_a2_msg_logps.shape)
+        # print(" joint_logps shape after stack: ", all_a2_joint_logps.shape)
+        # print("rewards shape after stack: ", all_a2_rewards.shape)
+        # print("vals shape after stack: ", all_a2_vals.shape)
+        
+
+        # print("rewards list: ", all_a1_rewards)
+        # all_a1_rewards = tf.convert_to_tensor(all_a1_rewards, dtype=tf.float32)
+        # # print("rewards shape", all_a1_rewards.shape)
+        # all_a1_vals = tf.convert_to_tensor(all_a1_vals, dtype=tf.float32)
+        # last_val = all_a1_vals[:, -1]
+        # all_a1_vals = tf.concat([all_a1_vals, last_val[:, None]], axis=1)
+
+        # returns_a1, advs_a1 = compute_gae(all_a1_rewards, all_a1_vals)
+        # print("returns_a1: ", returns_a1)
+        # print("Advantages a1: ", advs_a1)
+
+        break
             
-            # sender_advantages = rewards - sender_vals
-            # receiver_advantages = rewards - receiver_vals
+        
+            # print("Advantages: ", agent1_advantages)
 
             # dataset = tf.data.Dataset.from_tensor_slices((target_feats, distractor_feats, input_left, input_right, symbols, responses, sender_logps, receiver_logps, sender_advantages, receiver_advantages, rewards))
             # dataset = dataset.shuffle(batch_size).batch(minibatch_size)

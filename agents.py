@@ -60,22 +60,20 @@ class AgentDummy(tf.keras.Model):
 class AgentDummyCritic(tf.keras.Model):
     def __init__(self, embed_dim=50, vocab_size=10):
         super().__init__()
-        self.embed_img = tf.keras.layers.Dense(embed_dim, activation='sigmoid')
+        self.embed_img = tf.keras.layers.Dense(embed_dim, activation="sigmoid")
         self.embed_symbol = tf.keras.layers.Embedding(input_dim=vocab_size, output_dim=embed_dim)
         self.value_head = tf.keras.layers.Dense(1)
-        self.value_head_receiver = tf.keras.layers.Dense(1)  # for receiver
 
-    def call(self, feature_tensor, input_message=None):
-
+    def call(self, feature_tensor, input_message):
         img_emb = self.embed_img(feature_tensor)
         pooled = tf.reduce_mean(img_emb, axis=1)
-        val_img = tf.squeeze(self.value_head(pooled), axis=-1)
 
         msg_emb = self.embed_symbol(input_message)
         h = tf.concat([pooled, msg_emb], axis=-1)
-        val_msg = tf.squeeze(self.value_head_receiver(h), axis=-1)
 
-        return val_img, val_msg
+        value = tf.squeeze(self.value_head(h), axis=-1)  # (B,)
+        return value
+
     
         # def sender_crit_fn():
         #     img_emb = self.embed_img(feature_tensor)

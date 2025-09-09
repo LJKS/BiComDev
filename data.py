@@ -26,7 +26,7 @@ def show_images(images):
     plt.show()
 
 
-def sample_and_embed_img(dataset, num_img=3, num_batches=5):
+def sample_and_embed_img(dataset, num_img=3, batch_size=5):
     show_imgs = False
 
     def preprocess_img(image):
@@ -46,7 +46,7 @@ def sample_and_embed_img(dataset, num_img=3, num_batches=5):
    
     embeddings_list = []
     images_list = []
-    for _ in range(num_batches):
+    for _ in range(batch_size):
         # smaller scale buffer for shuffling cause my computer cant handle more :')
         buffer_size = 1000
         sampled_images = list(dataset.shuffle(buffer_size).take(num_img))
@@ -71,9 +71,9 @@ def sample_and_embed_img(dataset, num_img=3, num_batches=5):
     return embeds
 
 
-def create_dummy_data(num_obj, num_batches):
+def create_dummy_data(num_obj, batch_size):
     batch_list = []
-    for _ in range(num_batches):
+    for _ in range(batch_size):
         indices = tf.range(0, num_obj, dtype=tf.int32)
         dummy_features = tf.one_hot(indices, depth=len(indices))
         batch_list.append(dummy_features)
@@ -83,21 +83,21 @@ def create_dummy_data(num_obj, num_batches):
 def assign_feats_to_agents(embeddings, num_same=2, num_diff1=2, num_diff2=2):
 
 
-    num_batches = tf.shape(embeddings)[0]
+    batch_size = tf.shape(embeddings)[0]
     num_img = tf.shape(embeddings)[1]
 
     # for now the splits are still hard-coded but I'll work on an function for that later
     assert num_same + num_diff1 + num_diff2 == num_img, "sum of splits must equal number of images/objects"
 
 
-    indices = tf.stack([tf.random.shuffle(tf.range(num_img))[:num_img] for _ in range(num_batches)])
-    batch_feats = tf.gather(embeddings, indices, batch_dims=1) # shape [num_batches, num_img, feature_dim]
+    indices = tf.stack([tf.random.shuffle(tf.range(num_img))[:num_img] for _ in range(batch_size)])
+    batch_feats = tf.gather(embeddings, indices, batch_dims=1) # shape [batch_size, num_img, feature_dim]
 
 
     # Create mask to define which images are shared and which are different per agent
     base_mask = [0]*num_same + [1]*num_diff1 + [2]*num_diff2
-    mask_list = [tf.random.shuffle(base_mask) for _ in range(num_batches)]
-    mask = tf.stack(mask_list)  # [num_batches, num_img]
+    mask_list = [tf.random.shuffle(base_mask) for _ in range(batch_size)]
+    mask = tf.stack(mask_list)  # [batch_size, num_img]
 
     # Apply mask to create agent input
     agent1_feats = tf.where(mask[..., tf.newaxis] == 2,
@@ -113,19 +113,19 @@ def assign_feats_to_agents(embeddings, num_same=2, num_diff1=2, num_diff2=2):
 def shuffle_features_and_targets(feature_tensor, mask):
     '''extra shuffle of features to avoid position correlations (with target tracking)'''
    
-    num_batches = tf.shape(feature_tensor)[0]
+    batch_size = tf.shape(feature_tensor)[0]
     num_img = tf.shape(feature_tensor)[1]
 
-    perms = tf.argsort(tf.random.uniform((num_batches, num_img), dtype=tf.float32), axis=-1)
+    perms = tf.argsort(tf.random.uniform((batch_size, num_img), dtype=tf.float32), axis=-1)
 
-    batch_idx = tf.tile(tf.range(num_batches)[:, None], [1, num_img])
+    batch_idx = tf.tile(tf.range(batch_size)[:, None], [1, num_img])
     gather_idx = tf.stack([batch_idx, perms], axis=-1)
     shuffled_features = tf.gather_nd(feature_tensor, gather_idx)
 
     shuffled_mask = tf.gather_nd(mask, gather_idx)
 
     # new_target_positions = []
-    # for batch in range(num_batches):                          
+    # for batch in range(batch_size):                          
     #     perm = tf.cast(perms[batch], tf.int32)
     #     orig_targets = tf.cast(tf.where(mask[batch] == 0)[:, 0], tf.int32)
 
@@ -137,7 +137,7 @@ def shuffle_features_and_targets(feature_tensor, mask):
 
 # # example usage
 # train_ds,_,_ = load_coco_captions(data_dir="./data")
-# sample = sample_and_embed_img(train_ds, num_img=7, num_batches=5)
+# sample = sample_and_embed_img(train_ds, num_img=7, batch_size=5)
 # #print(sample)
 # a1_feats, a2_feats, mask = assign_feats_to_agents(sample, num_img=7, num_same=3, num_diff1=2, num_diff2=2)
 # a1_feats_shuffled,_,_ = shuffle_features_and_targets(a1_feats, mask)
@@ -168,8 +168,8 @@ def shuffle_features_and_targets(feature_tensor, mask):
 def get_image_input():
     train_ds, val_ds, test_ds = load_coco_captions(data_dir="./data")
 
-    features = sample_and_embed_img(train_ds, num_img=7, num_batches=5)
-    # features = create_dummy_data(num_obj=7, num_batches=2)
+    features = sample_and_embed_img(train_ds, num_img=7, batch_size=5)
+    # features = create_dummy_data(num_obj=7, batch_size=2)
 
     agent_1, agent_2, mask = assign_feats_to_agents(features, num_same=3, num_diff1=2, num_diff2=2)
 
