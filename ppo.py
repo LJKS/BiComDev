@@ -337,33 +337,7 @@ def train(num_iterations=1000, batch_size=2048, minibatch_size=64, num_epochs=4)
 
 
         break
-        # dataset = tf.data.Dataset.from_tensor_slices((target_feats, distractor_feats, input_left, input_right, symbols, responses, sender_logps, receiver_logps, sender_advantages, receiver_advantages, rewards))
-        # dataset = dataset.shuffle(batch_size).batch(minibatch_size)
-
-        # for _ in range(num_epochs):
-        #     for mb_target, mb_distractor, mb_left, mb_right, mb_symbols, mb_responses, mb_sender_logp, mb_receiver_logp, mb_sender_advantages, mb_receiver_advantages, mb_rewards in dataset:
-        #         losses = train_step(mb_target, mb_distractor, 
-        #                     mb_left, mb_right, 
-        #                     mb_symbols, mb_responses,
-        #                     mb_sender_logp, mb_receiver_logp, 
-        #                     mb_sender_advantages, mb_receiver_advantages,
-        #                     mb_rewards)
-                
-        #         total_sender_loss += losses["sender_loss"].numpy()
-        #         total_sender_crit_loss += losses["sender_crit_loss"].numpy()
-        #         total_receiver_loss += losses["receiver_loss"].numpy()
-        #         total_receiver_crit_loss += losses["receiver_crit_loss"].numpy()
-        #         total_minibatches += 1
-        
-        # avg_reward = np.mean(rewards_list)
-        # print(f"Iter {iter} | "
-        #     f"Reward: {avg_reward:.3f} | "
-        #     f"S_loss: {total_sender_loss/total_minibatches:.4f} | "
-        #     f"S_vloss: {total_sender_crit_loss/total_minibatches:.4f} | "
-        #     f"R_loss: {total_receiver_loss/total_minibatches:.4f} | "
-        #     f"R_vloss: {total_receiver_crit_loss/total_minibatches:.4f}")
-            
-
+    
 
 train(num_iterations=10, batch_size=1, minibatch_size=1, num_epochs=1)
         
