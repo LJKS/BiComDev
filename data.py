@@ -1,6 +1,5 @@
 import tensorflow as tf
 import tensorflow_datasets as tfds
-import matplotlib.pyplot as plt
 import os
 from tqdm import tqdm
 
@@ -16,25 +15,24 @@ def load_coco_images(data_dir="./data"):
 
 # Optiion rename to save_ms_coco_vectors --> no return
 # als create_dataset mit cache & return
-def save_mscoco_resnet_image_features(dataset): # put ms_coco in name
+def save_mscoco_resnet_image_features(dataset, save_dir=""): # put ms_coco in name
     all_feat_vs = []
     # Use dataset.map to preprocess all images
     def preprocess_img(element):
         image = element["image"]
         tf.debugging.assert_rank(image, 3,message="Expected image to be a 3D tensor")
-
-        image = tf.image.resize(image, (224, 224)) # this line recasts as float32
+        image = tf.image.resize(image, (224, 224)) 
         tf.debugging.assert_shapes([(image, (224, 224, 3))], message="the image needs to be of shape (224,224,3)")
         image = tf.keras.applications.resnet50.preprocess_input(image)
-
         return image
     
     dataset = dataset.map(preprocess_img)
-    # For loop through dataset
+
     resnet = tf.keras.applications.ResNet50(weights="imagenet", include_top=False, pooling="avg")
+
     # for a progressbar
     dataset_size = tf.data.experimental.cardinality(dataset).numpy()
-
+    # For loop through dataset
     for elem in tqdm(dataset, total=dataset_size, desc="Extracting features"):
         elem = tf.expand_dims(elem, axis=0) 
         feat_v = resnet(elem)  
@@ -47,30 +45,21 @@ def save_mscoco_resnet_image_features(dataset): # put ms_coco in name
     # Use tf.data.dataset.from_tensor_slices to get dataset from tensor
     feat_dataset = tf.data.Dataset.from_tensor_slices(all_feats_tensor)
     # Use dataset.save to save the image vectors on hard drive
-    path = os.path.join(os.getcwd(), "saved_data")
+    path = os.path.join(os.getcwd(), f"saved_data/{save_dir}")
 
     #tf.data.Dataset.save(feat_dataset, path)
     feat_dataset.save(path)
-        # dataset.save() instead (.cache() Vorteil instead: man muss noch nichtmal mehr load & save machen)
 
-    # Would it be better to switch to the resnet call you used?
-    # resnet_prep_batch_size = 4
-    # dataset = dataset.batch(resnet_prep_batch_size)
-    # dataset = dataset.map(lambda img: resnet(img), num_parallel_calls=32)
-    # dataset = dataset.unbatch()
-    # return feat_dataset
 def create_local_dataset_files():
-     train_ds, val_ds, test_ds = load_coco_images(data_dir="./data")
-     save_mscoco_resnet_image_features(train_ds)
+    train_ds, val_ds, test_ds = load_coco_images(data_dir="./data")
+    save_mscoco_resnet_image_features(train_ds, save_dir="train")
+    save_mscoco_resnet_image_features(test_ds, save_dir="test")
+    save_mscoco_resnet_image_features(val_ds, save_dir="val")
 
-# sample images to use for a game
-def get_game_imgs(dataset, num_img):
-        buffer_size = 1000
-        # dataset = tf.data.Dataset.from_tensor_slices(dataset)
+
+def get_game_imgs(dataset, num_img, buffer_size):
         sampled_images = list(dataset.shuffle(buffer_size).take(num_img))
         sampled_images = tf.convert_to_tensor(sampled_images)
-        # sampled_images = tf.squeeze(sampled_images)
-
         return sampled_images
 
 # assign which images are seen by which agent
@@ -88,17 +77,12 @@ def assign_feats_to_agents(embeddings, num_same=2, num_diff1=2, num_diff2=2):
 
     a1_idx = tf.concat([same_idx, diff_1_idx], axis=0)
     a2_idx = tf.concat([same_idx, diff_2_idx], axis=0)
+
     # Apply gather according to respective indices to create agent input
     agent1_feats = tf.gather(params=embeddings, indices=a1_idx)
-                    # tf.where(mask[..., tf.newaxis] == 2,
-                    #                         tf.zeros_like(embeddings),  # agent1 does not see diff2
-                    #                         embeddings)
     agent2_feats = tf.gather(params=embeddings, indices=a2_idx) 
-    # = tf.where(mask[..., tf.newaxis] == 1,
-    #                         tf.zeros_like(embeddings),  # agent2 does not see diff1
-    #                         embeddings)
 
-    return agent1_feats, agent2_feats#, mask
+    return agent1_feats, agent2_feats
 
 
 # shuffle the image positions per agent to avoid correlation
@@ -112,66 +96,40 @@ def shuffle_features_and_targets(feature_tensor):
 
     return shuffled_features, perm
 
-def get_image_input():
 
-    path = os.path.join(os.getcwd(), "saved_data")
-    dataset =  tf.data.Dataset.load(path)
-    num_same = 3
-    num_diff1 = 2
-    num_diff2 = 2
+def game_instances_generator(dataset, num_same, num_diff1, num_diff2, buffer_size=1000):
+    num_img = num_same + num_diff1 + num_diff2
 
-    features = get_game_imgs(dataset, num_img=7)
-    a1_feats, a2_feats = assign_feats_to_agents(features, num_same=num_same, num_diff1=num_diff1, num_diff2=num_diff2)
+    while True:
+        game_imgs = get_game_imgs(dataset, num_img, buffer_size)
 
-    a1_feats_shuffled,  a1_perm  = shuffle_features_and_targets(a1_feats)
-    a2_feats_shuffled,  a2_perm = shuffle_features_and_targets(a2_feats)
+        # assigning (&masking) the images to each agent according to the (currently hardcoded) split
+        a1_feats, a2_feats = assign_feats_to_agents(game_imgs, num_same=num_same, num_diff1=num_diff1, num_diff2=num_diff2)
+        # shuffling the positions of the images with individual perms per agent 
+        a1_feats_shuffled, a1_perm = shuffle_features_and_targets(a1_feats)
+        a2_feats_shuffled, a2_perm = shuffle_features_and_targets(a2_feats)
 
-    # making sure targets are aligned across agents
-    a1_targets = tf.boolean_mask(a1_feats_shuffled, a1_perm < num_same)
-    a2_targets = tf.boolean_mask(a2_feats_shuffled,  a2_perm < num_same)
-
-    assert tf.reduce_all(tf.equal(tf.sort(a1_targets, axis=0),
-                                  tf.sort(a2_targets, axis=0))), "Targets are not aligned!"
-    
-    return a1_feats_shuffled, a2_feats_shuffled
-
-# a1_feats_shuffled, a2_feats_shuffled = get_image_input()
-# print(a1_feats_shuffled)
-#
-
-# for pipeline testing only; not for investigating learning later
-def make_dummy_embeddings(num_img=7, feat_dim=4):
-    """
-    Create easily-readable dummy embeddings.
-    Each row = one image, each col = one feature.
-    """
-    return tf.reshape(tf.range(num_img * feat_dim, dtype=tf.int32),
-                      (num_img, feat_dim))
-
-get_image_input()
-# embeddings = make_dummy_embeddings()
-
-# a1_feats, a2_feats = assign_feats_to_agents(embeddings, num_same=3, num_diff1=2, num_diff2=2)
-# print(a1_feats, a2_feats)
-
-# a1_feats_shuffled, a1_perm = shuffle_features_and_targets(a1_feats)
-# a2_feats_shuffled, a2_perm = shuffle_features_and_targets(a2_feats)
-# print("shuffled feats: ", a1_feats_shuffled, a2_feats_shuffled)
-# print("a1_perm: ", a1_perm)
-# print("a2_perm: ", a2_perm)
-
-#  # making sure targets are aligned across agents
-# a1_targets = tf.boolean_mask(a1_feats_shuffled, a1_perm < 3)
-# a2_targets = tf.boolean_mask(a2_feats_shuffled,  a2_perm < 3)
-
-# print("targets: ", a1_targets)
-# assert tf.reduce_all(tf.equal(tf.sort(a1_targets, axis=0),
-#                                 tf.sort(a2_targets, axis=0))), "Target are not aligned!"
-
-# TODO: - function to randomize same/diff spilt
-#       - making sure it actually works with the rollout & stuff...
-#           - and figure out where and how the batching should be
-#       - create correct dummy data for testing learning later
+        yield (a1_feats_shuffled, a2_feats_shuffled, a1_perm, a2_perm, num_same)
 
 
+def create_game_instances_dataset(dataset, num_same=3, num_diff1=2, num_diff2=2, buffer_size=1000):
+    output_types = (tf.float32, tf.float32, tf.int32, tf.int32, tf.int32)
+    output_shapes = (
+        (num_same + num_diff1, 2048),   # input for agent1
+        (num_same + num_diff2, 2048),   # input for agent2
+        (num_same + num_diff1,),        # perm of input for agent1
+        (num_same + num_diff2,),        # perm of inpur for agent2
+        ()                              # number of target (needed for target identification later)
+    )
+
+    dataset_gen = lambda: game_instances_generator(dataset, num_same, num_diff1, num_diff2, buffer_size)
+    game_input_dataset = tf.data.Dataset.from_generator(dataset_gen,
+                                                output_types=output_types,
+                                                output_shapes=output_shapes)
+    return game_input_dataset
+
+
+# path = os.path.join(os.getcwd(), "saved_data/train")
+# dataset = tf.data.Dataset.load(path)
+# game_input_data = create_game_instances_dataset(dataset)
 

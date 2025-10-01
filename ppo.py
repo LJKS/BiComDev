@@ -1,9 +1,10 @@
 import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
-
+import os
 import agents 
 import data 
+
 @tf.function
 def train_step(agent, critic, optimizer_agent, optimizer_critic,
                features, messages,
@@ -95,8 +96,27 @@ def train_agent(agent, critic, optimizer_agent, optimizer_critic,
             
     return np.mean(all_actor_losses), np.mean(all_critic_losses), np.mean(all_entropies)
 
+def generate_dataset(num_same, num_diff1, num_diff2, shuffle_buffer_size, prefetch_buffer_size, batch_size, which='TRAIN'):
 
-def combined(agent, critic, features, mask, message):
+    if which == 'TRAIN':
+        path = os.path.join(os.getcwd(), "saved_data/train")
+    elif which == 'TEST':
+        path = os.path.join(os.getcwd(), "saved_data/test")
+    elif which == 'VAL':
+        path = os.path.join(os.getcwd(), "saved_data/val")
+
+    dataset = tf.data.Dataset.load(path)
+    game_input_data = data.create_game_instances_dataset(dataset, num_same, num_diff1, num_diff2, shuffle_buffer_size)
+
+    game_input_data = game_input_data.shuffle(shuffle_buffer_size)
+    game_input_data = game_input_data.batch(batch_size)
+    game_input_data = game_input_data.prefetch(prefetch_buffer_size) #game_input_data = game_input_data.prefetch(tf.data.AUTOTUNE)
+
+    return game_input_data
+    
+    
+def rollout(agent, critic, features, perm, num_targets, message):
+
     probs_img, probs_msg = agent(features, message)
     vals = critic(features, message)
 
@@ -110,10 +130,13 @@ def combined(agent, critic, features, mask, message):
 
     preds = tf.cast(preds, dtype=tf.float32)
     # normalized by target_num to avoid reward inflation from higher number of targets
-    target_mask = tf.cast(tf.equal(mask, 0), tf.float32)
-    num_targets = tf.reduce_sum(target_mask, axis=-1) + 1e-8
-    correct = tf.reduce_sum(preds * target_mask, axis=-1)  
-    rewards = correct / (num_targets + 1e-8)       
+
+    
+    target_mask = perm < num_targets
+    target_mask_int = tf.cast(target_mask, tf.int32)
+
+    correct = tf.reduce_sum(preds * target_mask_int, axis=-1)  
+    rewards = correct / num_targets
 
     joint_logps = tf.reduce_sum(img_logps, axis=-1) + tf.reduce_sum(msg_logps, axis=-1)
 
@@ -171,9 +194,6 @@ def train(num_iterations=1000, batch_size=2048, minibatch_size=64, num_epochs=4)
 
         max_steps = 10
 
-        # all_a1_symbols, all_a1_preds, all_a1_img_logps, all_a1_msg_logps, all_a1_joint_logps, all_a1_rewards, all_a1_vals = [],[],[],[],[],[],[]
-        # all_a2_symbols, all_a2_preds, all_a2_img_logps, all_a2_msg_logps, all_a2_joint_logps, all_a2_rewards, all_a2_vals = [],[],[],[],[],[],[]
-        
         # tensor array setup for agent 1
         ta_messages_to_a1 = tf.TensorArray(tf.int32, size=max_steps)
         ta_a1_symbols = tf.TensorArray(tf.int32, size=max_steps)
@@ -198,13 +218,13 @@ def train(num_iterations=1000, batch_size=2048, minibatch_size=64, num_epochs=4)
         num_obj = 15
 
         # images = data.sample_and_embed_img(train_ds, num_img=6, batch_size=5)
-        numbers = data.create_dummy_data(num_obj=num_obj, batch_size=batch_size)
 
-        feats_agent1, feats_agent2, assignment_mask = data.assign_feats_to_agents(numbers, num_same=1, num_diff1=7, num_diff2=7) # feats: shape=(batch_size, num_img, 2048), dtype=float32
-        feats_agent1_shuffled, shuffled_mask1= data.shuffle_features_and_targets(feats_agent1, assignment_mask)
-        feats_agent2_shuffled, shuffled_mask2 = data.shuffle_features_and_targets(feats_agent2, assignment_mask)
-        # print(feats_agent1_shuffled)
+        # feats_agent1, feats_agent2 = data.assign_feats_to_agents(numbers, num_same=1, num_diff1=7, num_diff2=7) # feats: shape=(batch_size, num_img, 2048), dtype=float32
+        # feats_agent1_shuffled, a1_perm = data.shuffle_features_and_targets(feats_agent1)
+        # feats_agent2_shuffled, a2_perm = data.shuffle_features_and_targets(feats_agent2)
+        # # print(feats_agent1_shuffled)
 
+        feats_agent1_shuffled, feats_agent2_shuffled, a1_perm, a2_perm, num_targets = data.get_image_input()
 
         for current_ts in tf.range(max_steps):
 
@@ -223,9 +243,10 @@ def train(num_iterations=1000, batch_size=2048, minibatch_size=64, num_epochs=4)
             ta_messages_to_a1 = ta_messages_to_a1.write(current_ts, message_to_a1)
             ta_messages_to_a2 = ta_messages_to_a2.write(current_ts, message_to_a2)
             
-            a1_symbols, a1_preds, a1_img_logps, a1_msg_logps, a1_joint_logps, a1_rewards, a1_vals = combined(agent_1, critic_1, feats_agent1_shuffled, shuffled_mask1, message_to_a1)
-            a2_symbols, a2_preds, a2_img_logps, a2_msg_logps, a2_joint_logps, a2_rewards, a2_vals= combined(agent_2, critic_2, feats_agent2_shuffled, shuffled_mask2, message_to_a2)
+            a1_symbols, a1_preds, a1_img_logps, a1_msg_logps, a1_joint_logps, a1_rewards, a1_vals = rollout(agent_1, critic_1, feats_agent1_shuffled, a1_perm, num_targets, message_to_a1)
+            a2_symbols, a2_preds, a2_img_logps, a2_msg_logps, a2_joint_logps, a2_rewards, a2_vals = rollout(agent_2, critic_2, feats_agent2_shuffled, a2_perm, num_targets, message_to_a2)
 
+            
             # initialize optimizer slots
             zero_grads_agent_1 = [tf.zeros_like(v) for v in agent_1.trainable_variables]
             zero_grads_critic_1 = [tf.zeros_like(v) for v in critic_1.trainable_variables]
@@ -341,80 +362,3 @@ def train(num_iterations=1000, batch_size=2048, minibatch_size=64, num_epochs=4)
 
 train(num_iterations=10, batch_size=1, minibatch_size=1, num_epochs=1)
         
-
-
-
-
-
-# def sender(agent,critic, features):
-#     sender_probs = agent(features, role=tf.constant(0)) # output shape: (batch_size, vocab_size)
-#     sender_vals = critic(features,role=tf.constant(0)) # output shape: (batch,)
-
-#     sender_dist = tfp.distributions.Categorical(probs=sender_probs)
-#     symbols = sender_dist.sample()       
-#     symbols = tf.cast(symbols, tf.int32) 
-#     sender_logps = sender_dist.log_prob(symbols)
-#     return sender_logps, symbols, sender_vals
-
-# def receiver(agent, critic, features, mask, message):
-#     receiver_probs = agent(features, role=tf.constant(1), input_message=message)
-#     receiver_vals = critic(features, role=tf.constant(1), input_message=message)
-
-#     pred = tf.cast(receiver_probs > 0.5, tf.int32)
-
-#     # normalized by target_num to avoid reward inflation from higher number of targets
-#     target_mask = tf.cast(tf.equal(mask, 0), tf.float32)
-#     num_targets = tf.reduce_sum(target_mask, axis=-1)
-#     reward = tf.reduce_sum(receiver_probs * target_mask, axis=-1) / (num_targets + 1e-8)
-
-#     return pred, reward, receiver_vals
-
-
-
-# @tf.function
-# def train_step( agent_1, agent_2, critic_1, critic_2, feats_agent1_shuffled, shuffled_mask1,feats_agent2_shuffled, shuffled_mask2,
-#                 all_a1_symbols, all_a1_preds, all_a1_img_logps, all_a1_msg_logps, all_a1_joint_logps, all_a1_rewards, all_a1_vals, returns_a1, advs_a1,
-#                 all_a2_symbols, all_a2_preds, all_a2_img_logps, all_a2_msg_logps, all_a2_joint_logps, all_a2_rewards, all_a2_vals, returns_a2, advs_a2
-#                ):    
-    
-#     clip_epsilon = 0.2
-
-#     with tf.GradientTape(persistent=True) as tape:
-#         combined(agent=agent_1, critic=critic_1, features=feats_agent1_shuffled, mask=shuffled_mask1,message=all_a1_symbols)
-
-#         sender_ratio = tf.exp(new_sender_logps - sender_logps)
-#         sender_clip = tf.clip_by_value(sender_ratio, 1 - clip_epsilon, 1 + clip_epsilon)
-#         sender_entropy = tf.reduce_mean(sender_dist.entropy())
-
-#         receiver_probs = receiver(input_left, input_right, symbols)
-#         receiver_vals = receiver_crit(input_left, input_right, symbols)
-#         receiver_dist = tfp.distributions.Categorical(probs=receiver_probs)
-
-#         new_receiver_logps = receiver_dist.log_prob(responses)
-
-#         receiver_ratio = tf.exp(new_receiver_logps - receiver_logps)
-#         receiver_clip = tf.clip_by_value(receiver_ratio, 1 - clip_epsilon, 1 + clip_epsilon)
-#         receiver_entropy = tf.reduce_mean(receiver_dist.entropy())
-
-#         sender_loss = -tf.reduce_mean(tf.minimum(sender_ratio * sender_advantages, sender_clip * sender_advantages)) - 0.01 * sender_entropy
-#         sender_crit_loss = tf.reduce_mean(tf.square(sender_advantages - sender_vals)) # tf.squeeze(sender_vals)
-        
-#         receiver_loss = -tf.reduce_mean(tf.minimum(receiver_ratio * receiver_advantages, receiver_clip * receiver_advantages))  - 0.01 * receiver_entropy
-#         receiver_crit_loss = tf.reduce_mean(tf.square(receiver_advantages - receiver_vals)) #tf.squeeze(receiver_vals)
-
-#     sender_grads =  tape.gradient(sender_loss, sender.trainable_variables)
-#     sender_crit_grads = tape.gradient(sender_crit_loss, sender_crit.trainable_variables)
-#     receiver_grads = tape.gradient(receiver_loss, receiver.trainable_variables)
-#     receiver_crit_grads = tape.gradient(receiver_crit_loss, receiver_crit.trainable_variables)
-
-#     optimizer_sender.apply_gradients(zip(sender_grads, sender.trainable_variables))
-#     optimizer_sender_crit.apply_gradients(zip(sender_crit_grads, sender_crit.trainable_variables))
-#     optimizer_receiver.apply_gradients(zip(receiver_grads, receiver.trainable_variables))
-#     optimizer_receiver_crit.apply_gradients(zip(receiver_crit_grads, receiver_crit.trainable_variables))
-
-#     return {
-#         "sender_loss": sender_loss,
-#         "sender_crit_loss": sender_crit_loss,
-#         "receiver_loss": receiver_loss,
-#         "receiver_crit_loss": receiver_crit_loss
-#     }
