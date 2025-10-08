@@ -5,6 +5,7 @@ import os
 import agents 
 import data 
 
+
 def generate_dataset(num_same, num_diff1, num_diff2, shuffle_buffer_size, prefetch_buffer_size, batch_size, which='TRAIN'):
     if which == 'TRAIN':
         path = os.path.join(os.getcwd(), "saved_data/train")
@@ -175,10 +176,9 @@ optimizer_crit_2 = tf.keras.optimizers.Adam(1e-2) #1e-3
 
 def train(num_iterations=1000, batch_size=2048, minibatch_size=64, num_epochs=4):
 
-    # load the data
-    # train_ds, val_ds, test_ds = data.load_coco_captions(data_dir="./data")
 
-    done = False
+    dataset = generate_dataset(num_same=3, num_diff1=2, num_diff2=2, shuffle_buffer_size=1000, prefetch_buffer_size=1000, batch_size=batch_size, which='TRAIN')
+
 
     # create the rollout 
     for iter in range(num_iterations): 
@@ -212,9 +212,6 @@ def train(num_iterations=1000, batch_size=2048, minibatch_size=64, num_epochs=4)
         ta_a2_joint_logps = tf.TensorArray(tf.float32, size=max_steps)
         ta_a2_rewards = tf.TensorArray(tf.float32, size=max_steps)
         ta_a2_vals = tf.TensorArray(tf.float32, size=max_steps)
-
-
-        dataset = generate_dataset(num_same=3, num_diff1=2, num_diff2=2, shuffle_buffer_size=1000, prefetch_buffer_size=1000, batch_size=batch_size, which='TRAIN')
 
         for (a1_feats, a1_targets), (a2_feats, a2_targets) in dataset:
 
