@@ -5,6 +5,71 @@ import os
 import agents 
 import data 
 
+def generate_dataset(num_same, num_diff1, num_diff2, shuffle_buffer_size, prefetch_buffer_size, batch_size, which='TRAIN'):
+    if which == 'TRAIN':
+        path = os.path.join(os.getcwd(), "saved_data/train")
+    elif which == 'TEST':
+        path = os.path.join(os.getcwd(), "saved_data/test")
+    elif which == 'VAL':
+        path = os.path.join(os.getcwd(), "saved_data/val")
+
+    dataset = tf.data.Dataset.load(path)
+    game_input_data = data.create_game_instances_dataset(dataset, num_same, num_diff1, num_diff2, shuffle_buffer_size)
+
+    game_input_data = game_input_data.shuffle(shuffle_buffer_size)
+    game_input_data = game_input_data.batch(batch_size)
+    game_input_data = game_input_data.prefetch(prefetch_buffer_size) #game_input_data = game_input_data.prefetch(tf.data.AUTOTUNE)
+
+    return game_input_data
+
+
+    
+def rollout(agent, critic, features, targets, message):
+
+    probs_img, probs_msg = agent(features, message)
+    vals = critic(features, message)
+
+    img_dist = tfp.distributions.Categorical(probs=probs_img)
+    symbols = img_dist.sample() # (B,)
+    img_logps = img_dist.log_prob(symbols) # (B,)
+
+    msg_dist = tfp.distributions.Bernoulli(probs=probs_msg)
+    preds = msg_dist.sample()
+    msg_logps = msg_dist.log_prob(preds)
+
+    preds = tf.cast(preds, dtype=tf.float32)
+    # normalized by target_num to avoid reward inflation from higher number of targets
+
+    num_targets = tf.reduce_sum(targets)
+
+    correct = tf.reduce_sum(preds * targets, axis=-1)  
+    rewards = correct / num_targets
+
+    joint_logps = tf.reduce_sum(img_logps, axis=-1) + tf.reduce_sum(msg_logps, axis=-1)
+
+    return symbols, preds, img_logps, msg_logps, joint_logps, rewards, vals
+
+
+
+def compute_gae(rewards, values, gamma=0.99, lam=0.95):
+
+    batch_size = tf.shape(rewards)[0]
+    total_timesteps = tf.shape(rewards)[1]
+
+    advs = tf.TensorArray(tf.float32, size=total_timesteps)
+    gae = tf.zeros((batch_size,), dtype=tf.float32)
+
+    for t in tf.range(total_timesteps - 1, -1, -1):  # loop backwards
+        delta = rewards[:, t] + gamma * values[:, t+1] - values[:, t]
+        gae = delta + gamma * lam * gae
+        advs = advs.write(t, gae)
+
+    advs = tf.transpose(advs.stack(), [1, 0])   # (B, T)
+    returns = advs + values[:, :-1]             # (B, T)
+
+    return returns, advs
+
+
 @tf.function
 def train_step(agent, critic, optimizer_agent, optimizer_critic,
                features, messages,
@@ -47,8 +112,6 @@ def train_step(agent, critic, optimizer_agent, optimizer_critic,
 
     del tape
 
-    print("No errors so far :)")
-
     return actor_loss, critic_loss, entropy
 
 
@@ -57,11 +120,12 @@ def train_agent(agent, critic, optimizer_agent, optimizer_critic,
                 old_joint_logps, advantages, returns,
                 minibatch_size, num_epochs):
 
-        # after you compute returns_a1, advantages_a1, etc.
+    
     batch_size = tf.shape(symbols)[0]
     total_timesteps = tf.shape(symbols)[1]
     buffer_size = int(batch_size * total_timesteps)
 
+    # flattening for 
     def flatten(x):
         x_shape = tf.shape(x)
         return tf.reshape(x, tf.concat([[x_shape[0] * x_shape[1]], x_shape[2:]], axis=0))
@@ -95,72 +159,7 @@ def train_agent(agent, critic, optimizer_agent, optimizer_critic,
             all_entropies.append(entropy.numpy())
             
     return np.mean(all_actor_losses), np.mean(all_critic_losses), np.mean(all_entropies)
-
-def generate_dataset(num_same, num_diff1, num_diff2, shuffle_buffer_size, prefetch_buffer_size, batch_size, which='TRAIN'):
-
-    if which == 'TRAIN':
-        path = os.path.join(os.getcwd(), "saved_data/train")
-    elif which == 'TEST':
-        path = os.path.join(os.getcwd(), "saved_data/test")
-    elif which == 'VAL':
-        path = os.path.join(os.getcwd(), "saved_data/val")
-
-    dataset = tf.data.Dataset.load(path)
-    game_input_data = data.create_game_instances_dataset(dataset, num_same, num_diff1, num_diff2, shuffle_buffer_size)
-
-    game_input_data = game_input_data.shuffle(shuffle_buffer_size)
-    game_input_data = game_input_data.batch(batch_size)
-    game_input_data = game_input_data.prefetch(prefetch_buffer_size) #game_input_data = game_input_data.prefetch(tf.data.AUTOTUNE)
-
-    return game_input_data
     
-    
-def rollout(agent, critic, features, perm, num_targets, message):
-
-    probs_img, probs_msg = agent(features, message)
-    vals = critic(features, message)
-
-    img_dist = tfp.distributions.Categorical(probs=probs_img)
-    symbols = img_dist.sample() # (B,)
-    img_logps = img_dist.log_prob(symbols) # (B,)
-
-    msg_dist = tfp.distributions.Bernoulli(probs=probs_msg)
-    preds = msg_dist.sample()
-    msg_logps = msg_dist.log_prob(preds)
-
-    preds = tf.cast(preds, dtype=tf.float32)
-    # normalized by target_num to avoid reward inflation from higher number of targets
-
-    
-    target_mask = perm < num_targets
-    target_mask_int = tf.cast(target_mask, tf.int32)
-
-    correct = tf.reduce_sum(preds * target_mask_int, axis=-1)  
-    rewards = correct / num_targets
-
-    joint_logps = tf.reduce_sum(img_logps, axis=-1) + tf.reduce_sum(msg_logps, axis=-1)
-
-    return symbols, preds, img_logps, msg_logps, joint_logps, rewards, vals
-
-
-
-def compute_gae(rewards, values, gamma=0.99, lam=0.95):
-
-    batch_size = tf.shape(rewards)[0]
-    total_timesteps = tf.shape(rewards)[1]
-
-    advs = tf.TensorArray(tf.float32, size=total_timesteps)
-    gae = tf.zeros((batch_size,), dtype=tf.float32)
-
-    for t in tf.range(total_timesteps - 1, -1, -1):  # loop backwards
-        delta = rewards[:, t] + gamma * values[:, t+1] - values[:, t]
-        gae = delta + gamma * lam * gae
-        advs = advs.write(t, gae)
-
-    advs = tf.transpose(advs.stack(), [1, 0])   # (B, T)
-    returns = advs + values[:, :-1]             # (B, T)
-
-    return returns, advs
 
 agent_1 = agents.AgentDummy()
 agent_2 = agents.AgentDummy()
@@ -214,66 +213,59 @@ def train(num_iterations=1000, batch_size=2048, minibatch_size=64, num_epochs=4)
         ta_a2_rewards = tf.TensorArray(tf.float32, size=max_steps)
         ta_a2_vals = tf.TensorArray(tf.float32, size=max_steps)
 
-        batch_size = 12
-        num_obj = 15
 
-        # images = data.sample_and_embed_img(train_ds, num_img=6, batch_size=5)
+        dataset = generate_dataset(num_same=3, num_diff1=2, num_diff2=2, shuffle_buffer_size=1000, prefetch_buffer_size=1000, batch_size=batch_size, which='TRAIN')
 
-        # feats_agent1, feats_agent2 = data.assign_feats_to_agents(numbers, num_same=1, num_diff1=7, num_diff2=7) # feats: shape=(batch_size, num_img, 2048), dtype=float32
-        # feats_agent1_shuffled, a1_perm = data.shuffle_features_and_targets(feats_agent1)
-        # feats_agent2_shuffled, a2_perm = data.shuffle_features_and_targets(feats_agent2)
-        # # print(feats_agent1_shuffled)
+        for (a1_feats, a1_targets), (a2_feats, a2_targets) in dataset:
 
-        feats_agent1_shuffled, feats_agent2_shuffled, a1_perm, a2_perm, num_targets = data.get_image_input()
+            for current_ts in tf.range(max_steps):
 
-        for current_ts in tf.range(max_steps):
+                message_to_a1 = tf.cond(
+                    tf.equal(current_ts, 0),
+                    lambda: tf.zeros([batch_size], dtype=tf.int32),  # initial messsage just filled with zeros
+                    lambda: ta_a2_symbols.read(current_ts-1)
+                )
 
-            message_to_a1 = tf.cond(
-                tf.equal(current_ts, 0),
-                lambda: tf.zeros([batch_size], dtype=tf.int32),  # initial messsage just filled with zeros
-                lambda: ta_a2_symbols.read(current_ts-1)
-            )
+                message_to_a2 = tf.cond(
+                    tf.equal(current_ts, 0),
+                    lambda: tf.zeros([batch_size], dtype=tf.int32),  # initial messsage just filled with zeros
+                    lambda: ta_a1_symbols.read(current_ts-1)
+                )
+                
+                ta_messages_to_a1 = ta_messages_to_a1.write(current_ts, message_to_a1)
+                ta_messages_to_a2 = ta_messages_to_a2.write(current_ts, message_to_a2)
+                
+                a1_symbols, a1_preds, a1_img_logps, a1_msg_logps, a1_joint_logps, a1_rewards, a1_vals = rollout(agent_1, critic_1, a1_feats, a1_targets, message_to_a1)
+                a2_symbols, a2_preds, a2_img_logps, a2_msg_logps, a2_joint_logps, a2_rewards, a2_vals = rollout(agent_2, critic_2, a2_feats, a2_targets, message_to_a2)
 
-            message_to_a2 = tf.cond(
-                tf.equal(current_ts, 0),
-                lambda: tf.zeros([batch_size], dtype=tf.int32),  # initial messsage just filled with zeros
-                lambda: ta_a1_symbols.read(current_ts-1)
-            )
-            
-            ta_messages_to_a1 = ta_messages_to_a1.write(current_ts, message_to_a1)
-            ta_messages_to_a2 = ta_messages_to_a2.write(current_ts, message_to_a2)
-            
-            a1_symbols, a1_preds, a1_img_logps, a1_msg_logps, a1_joint_logps, a1_rewards, a1_vals = rollout(agent_1, critic_1, feats_agent1_shuffled, a1_perm, num_targets, message_to_a1)
-            a2_symbols, a2_preds, a2_img_logps, a2_msg_logps, a2_joint_logps, a2_rewards, a2_vals = rollout(agent_2, critic_2, feats_agent2_shuffled, a2_perm, num_targets, message_to_a2)
+                
+                # initialize optimizer slots
+                zero_grads_agent_1 = [tf.zeros_like(v) for v in agent_1.trainable_variables]
+                zero_grads_critic_1 = [tf.zeros_like(v) for v in critic_1.trainable_variables]
+                optimizer_agent_1.apply_gradients(zip(zero_grads_agent_1, agent_1.trainable_variables))
+                optimizer_crit_1.apply_gradients(zip(zero_grads_critic_1, critic_1.trainable_variables))
+                
+                zero_grads_agent_2 = [tf.zeros_like(v) for v in agent_2.trainable_variables]
+                zero_grads_critic_2 = [tf.zeros_like(v) for v in critic_2.trainable_variables]
+                optimizer_agent_2.apply_gradients(zip(zero_grads_agent_2, agent_2.trainable_variables))
+                optimizer_crit_2.apply_gradients(zip(zero_grads_critic_2, critic_2.trainable_variables))
 
-            
-            # initialize optimizer slots
-            zero_grads_agent_1 = [tf.zeros_like(v) for v in agent_1.trainable_variables]
-            zero_grads_critic_1 = [tf.zeros_like(v) for v in critic_1.trainable_variables]
-            optimizer_agent_1.apply_gradients(zip(zero_grads_agent_1, agent_1.trainable_variables))
-            optimizer_crit_1.apply_gradients(zip(zero_grads_critic_1, critic_1.trainable_variables))
-            
-            zero_grads_agent_2 = [tf.zeros_like(v) for v in agent_2.trainable_variables]
-            zero_grads_critic_2 = [tf.zeros_like(v) for v in critic_2.trainable_variables]
-            optimizer_agent_2.apply_gradients(zip(zero_grads_agent_2, agent_2.trainable_variables))
-            optimizer_crit_2.apply_gradients(zip(zero_grads_critic_2, critic_2.trainable_variables))
+                ta_a1_symbols = ta_a1_symbols.write(current_ts, a1_symbols)
+                ta_a1_preds = ta_a1_preds.write(current_ts, a1_preds)
+                ta_a1_img_logps = ta_a1_img_logps.write(current_ts, a1_img_logps)
+                ta_a1_msg_logps = ta_a1_msg_logps.write(current_ts, a1_msg_logps)
+                ta_a1_joint_logps = ta_a1_joint_logps.write(current_ts, a1_joint_logps)
+                ta_a1_rewards = ta_a1_rewards.write(current_ts, a1_rewards)
+                ta_a1_vals = ta_a1_vals.write(current_ts, a1_vals)
 
-            ta_a1_symbols = ta_a1_symbols.write(current_ts, a1_symbols)
-            ta_a1_preds = ta_a1_preds.write(current_ts, a1_preds)
-            ta_a1_img_logps = ta_a1_img_logps.write(current_ts, a1_img_logps)
-            ta_a1_msg_logps = ta_a1_msg_logps.write(current_ts, a1_msg_logps)
-            ta_a1_joint_logps = ta_a1_joint_logps.write(current_ts, a1_joint_logps)
-            ta_a1_rewards = ta_a1_rewards.write(current_ts, a1_rewards)
-            ta_a1_vals = ta_a1_vals.write(current_ts, a1_vals)
-
-            ta_a2_symbols = ta_a2_symbols.write(current_ts, a2_symbols)
-            ta_a2_preds = ta_a2_preds.write(current_ts, a2_preds)
-            ta_a2_img_logps = ta_a2_img_logps.write(current_ts, a2_img_logps)
-            ta_a2_msg_logps = ta_a2_msg_logps.write(current_ts, a2_msg_logps)
-            ta_a2_joint_logps = ta_a2_joint_logps.write(current_ts, a2_joint_logps)
-            ta_a2_rewards = ta_a2_rewards.write(current_ts, a2_rewards)
-            ta_a2_vals = ta_a2_vals.write(current_ts, a2_vals)
-            
+                ta_a2_symbols = ta_a2_symbols.write(current_ts, a2_symbols)
+                ta_a2_preds = ta_a2_preds.write(current_ts, a2_preds)
+                ta_a2_img_logps = ta_a2_img_logps.write(current_ts, a2_img_logps)
+                ta_a2_msg_logps = ta_a2_msg_logps.write(current_ts, a2_msg_logps)
+                ta_a2_joint_logps = ta_a2_joint_logps.write(current_ts, a2_joint_logps)
+                ta_a2_rewards = ta_a2_rewards.write(current_ts, a2_rewards)
+                ta_a2_vals = ta_a2_vals.write(current_ts, a2_vals)
+                
 
         # stacking array from rollout - Agent 1    
         all_messages_to_a1 =ta_messages_to_a1.stack()   # shape: (total_timesteps, batch_size)
@@ -335,30 +327,31 @@ def train(num_iterations=1000, batch_size=2048, minibatch_size=64, num_epochs=4)
         
         # print(message_to_a1)
 
-        last_val_a1 = critic_1(feats_agent1_shuffled, message_to_a1)
+        last_val_a1 = critic_1(a1_feats, message_to_a1)
         all_a1_vals = tf.concat([all_a1_vals, last_val_a1[:, None]], axis=1)  # (batch_size, total_timesteps+1)
         returns_a1, advantages_a1 = compute_gae(all_a1_rewards, all_a1_vals)
 
-        last_val_a2 = critic_2(feats_agent2_shuffled, message_to_a2)
+        last_val_a2 = critic_2(a2_feats, message_to_a2)
         all_a2_vals = tf.concat([all_a2_vals, last_val_a2[:, None]], axis=1)  # (batch_size, total_timesteps+1)
         returns_a2, advantages_a2 = compute_gae(all_a2_rewards, all_a2_vals)
             
             
         losses_a1 = train_agent(agent_1, critic_1, optimizer_agent_1, optimizer_crit_1,
-                        feats_agent1_shuffled, all_messages_to_a1,
+                        a1_feats, all_messages_to_a1,
                         all_a1_symbols, all_a1_preds,
                         all_a1_joint_logps, advantages_a1, returns_a1,
                         minibatch_size, num_epochs)
 
         losses_a2 = train_agent(agent_2, critic_2, optimizer_agent_2, optimizer_crit_2,
-                                feats_agent2_shuffled, all_messages_to_a2,
+                                a2_feats, all_messages_to_a2,
                                 all_a2_symbols, all_a2_preds,
                                 all_a2_joint_logps, advantages_a2, returns_a2,
                                 minibatch_size, num_epochs)
 
+        
+        print("Losses: ", losses_a1, losses_a2)
 
-        break
+        
     
-
-train(num_iterations=10, batch_size=1, minibatch_size=1, num_epochs=1)
+train(num_iterations=2, batch_size=2, minibatch_size=1, num_epochs=1)
         

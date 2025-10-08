@@ -49,6 +49,9 @@ class AgentDummy(tf.keras.Model):
             msg_emb = self.embed_symbol(input_message) 
             msg_emb = tf.expand_dims(msg_emb, axis=1)   
 
+            # print("img_emb shape:", img_emb.shape)
+            # print("msg_emb shape:", msg_emb.shape)
+
             dot = tf.reduce_sum(img_emb * msg_emb, axis=-1)  
             dot_sig = tf.nn.sigmoid(dot) # tf.nn.softmax(dot / self.temperature)
 

@@ -66,9 +66,7 @@ def get_game_imgs(dataset, num_img, buffer_size):
 def assign_feats_to_agents(embeddings, num_same=2, num_diff1=2, num_diff2=2):
 
     num_img = tf.shape(embeddings)[0]
-
-    # for now the splits are still hard-coded but I'll work on an function for that later
-    assert num_same + num_diff1 + num_diff2 == num_img, "sum of splits must equal number of images/objects"
+    tf.debugging.assert_equal(num_same + num_diff1 + num_diff2, tf.shape(embeddings)[0],message="sum of splits must equal number of images/objects")
 
     # Create indices of which images are shared and which are different per agent
     same_idx =  tf.range(0, num_same)
@@ -86,7 +84,7 @@ def assign_feats_to_agents(embeddings, num_same=2, num_diff1=2, num_diff2=2):
 
 
 # shuffle the image positions per agent to avoid correlation
-def shuffle_features_and_targets(feature_tensor):
+def shuffle_features_and_targets(feature_tensor, num_targets):
     '''extra shuffle of features to avoid position correlations (with target tracking)'''
    
     num_img = tf.shape(feature_tensor)[0]
@@ -94,42 +92,108 @@ def shuffle_features_and_targets(feature_tensor):
 
     shuffled_features = tf.gather(feature_tensor, perm, axis=0)
 
-    return shuffled_features, perm
+    target_vector = perm < num_targets
+    target_vector = tf.cast(target_vector, tf.float32)
+
+    return shuffled_features, target_vector
 
 
-def game_instances_generator(dataset, num_same, num_diff1, num_diff2, buffer_size=1000):
+def create_game_instances_dataset(dataset, num_same, num_diff1, num_diff2, buffer_size=1000):
     num_img = num_same + num_diff1 + num_diff2
 
-    while True:
-        game_imgs = get_game_imgs(dataset, num_img, buffer_size)
 
-        # assigning (&masking) the images to each agent according to the (currently hardcoded) split
-        a1_feats, a2_feats = assign_feats_to_agents(game_imgs, num_same=num_same, num_diff1=num_diff1, num_diff2=num_diff2)
-        # shuffling the positions of the images with individual perms per agent 
-        a1_feats_shuffled, a1_perm = shuffle_features_and_targets(a1_feats)
-        a2_feats_shuffled, a2_perm = shuffle_features_and_targets(a2_feats)
+    dataset = dataset.batch(num_img)
+    dataset = dataset.map(lambda game_imgs: assign_feats_to_agents(game_imgs, num_same=num_same, num_diff1=num_diff1, num_diff2=num_diff2))
+    
+    # assigning (&masking) the images to each agent according to the (currently hardcoded) split
+    dataset = dataset.map(lambda a1_feats, a2_feats: (shuffle_features_and_targets(a1_feats, num_same), shuffle_features_and_targets(a2_feats, num_same)))
 
-        yield (a1_feats_shuffled, a2_feats_shuffled, a1_perm, a2_perm, num_same)
+    return dataset
 
 
-def create_game_instances_dataset(dataset, num_same=3, num_diff1=2, num_diff2=2, buffer_size=1000):
-    output_types = (tf.float32, tf.float32, tf.int32, tf.int32, tf.int32)
-    output_shapes = (
-        (num_same + num_diff1, 2048),   # input for agent1
-        (num_same + num_diff2, 2048),   # input for agent2
-        (num_same + num_diff1,),        # perm of input for agent1
-        (num_same + num_diff2,),        # perm of inpur for agent2
-        ()                              # number of target (needed for target identification later)
-    )
+def test_all():
+    print("\n🔍 Running full data pipeline test...\n")
 
-    dataset_gen = lambda: game_instances_generator(dataset, num_same, num_diff1, num_diff2, buffer_size)
-    game_input_dataset = tf.data.Dataset.from_generator(dataset_gen,
-                                                output_types=output_types,
-                                                output_shapes=output_shapes)
-    return game_input_dataset
+    # 1️⃣ Test dataset loading
+    print("→ Loading COCO images...")
+    try:
+        train_ds, val_ds, test_ds = load_coco_images()
+        assert isinstance(train_ds, tf.data.Dataset)
+        print("✅ COCO dataset loaded successfully.")
+    except Exception as e:
+        print("❌ COCO load failed:", e)
+        return
 
+    # 2️⃣ Test feature extraction on a small subset
+    print("\n→ Testing feature extraction on a small sample...")
+    try:
+        small_subset = train_ds.take(100)
+        save_mscoco_resnet_image_features(small_subset, save_dir="test_sample")
+        saved_path = os.path.join(os.getcwd(), "saved_data/test_sample")
+        assert os.path.exists(saved_path)
+        print("✅ Features extracted & saved successfully at:", saved_path)
+    except Exception as e:
+        print("❌ Feature extraction failed:", e)
+        return
 
-# path = os.path.join(os.getcwd(), "saved_data/train")
-# dataset = tf.data.Dataset.load(path)
-# game_input_data = create_game_instances_dataset(dataset)
+    # 3️⃣ Test reloading saved dataset
+    print("\n→ Reloading saved dataset...")
+    try:
+        reloaded = tf.data.Dataset.load(saved_path)
+        sample = next(iter(reloaded))
+        print("✅ Reloaded sample shape:", sample.shape)
+    except Exception as e:
+        print("❌ Reloading failed:", e)
+        return
+
+    # 4️⃣ Test sampling images
+    print("\n→ Testing image sampling function...")
+    try:
+        sampled_imgs = get_game_imgs(reloaded, num_img=7, buffer_size=10)
+        assert sampled_imgs.shape[0] == 7
+        print("✅ Sampling successful. Shape:", sampled_imgs.shape)
+    except Exception as e:
+        print("❌ Sampling failed:", e)
+        return
+
+    # 5️⃣ Test agent feature assignment
+    print("\n→ Testing assign_feats_to_agents...")
+    try:
+        a1_feats, a2_feats = assign_feats_to_agents(sampled_imgs, num_same=3, num_diff1=2, num_diff2=2)
+        print("✅ Assign successful.")
+        print("   A1 feats:", a1_feats.shape)
+        print("   A2 feats:", a2_feats.shape)
+    except Exception as e:
+        print("❌ Assign_feats_to_agents failed:", e)
+        return
+
+    # 6️⃣ Test shuffling & target creation
+    print("\n→ Testing shuffle_features_and_targets...")
+    try:
+        shuffled_feats, targets = shuffle_features_and_targets(a1_feats, num_targets=3)
+        assert shuffled_feats.shape[0] == targets.shape[0]
+        num_targets_found = tf.reduce_sum(targets).numpy()
+        print(f"✅ Shuffle & target creation OK. Found {num_targets_found} targets.")
+    except Exception as e:
+        print("❌ Shuffle_features_and_targets failed:", e)
+        return
+
+    # 7️⃣ Test game dataset creation pipeline
+    print("\n→ Testing create_game_instances_dataset...")
+    try:
+        game_ds = create_game_instances_dataset(reloaded, 3, 2, 2, buffer_size=10)
+        for a1, a2 in game_ds.take(1):
+            a1_feats, a1_targets = a1
+            a2_feats, a2_targets = a2
+            print("✅ Game dataset instance created successfully!")
+            print("   A1 feats shape:", a1_feats.shape)
+            print("   A1 targets shape:", a1_targets.shape)
+            print("   A2 feats shape:", a2_feats.shape)
+            print("   A2 targets shape:", a2_targets.shape)
+    except Exception as e:
+        print("❌ create_game_instances_dataset failed:", e)
+        return
+
+    print("\n All tests passed successfully!")
+
 
