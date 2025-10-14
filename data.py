@@ -56,12 +56,6 @@ def create_local_dataset_files():
     save_mscoco_resnet_image_features(test_ds, save_dir="test")
     save_mscoco_resnet_image_features(val_ds, save_dir="val")
 
-
-def get_game_imgs(dataset, num_img, buffer_size):
-        sampled_images = list(dataset.shuffle(buffer_size).take(num_img))
-        sampled_images = tf.convert_to_tensor(sampled_images)
-        return sampled_images
-
 # assign which images are seen by which agent
 def assign_feats_to_agents(embeddings, num_same=2, num_diff1=2, num_diff2=2):
 

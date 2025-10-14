@@ -149,6 +149,11 @@ def train_agent(agent, critic, optimizer_agent, optimizer_critic,
         for (mb_feats, mb_messages, mb_symbols, mb_preds,
              mb_old_joint_logps, mb_advs, mb_returns) in dataset:
 
+
+            # dataset entry ist dictionary
+            # make sure indices are correct / -> more states than wahrscheinlichkeiten
+            # more messages than wahrscheinlichkeiten 
+
             actor_loss, critic_loss, entropy = train_step(
                 agent, critic, optimizer_agent, optimizer_critic,
                 mb_feats, mb_messages,
