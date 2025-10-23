@@ -1,10 +1,8 @@
-import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
-import os
-import agents 
+import agents
 import data 
-
+import os 
 
 def generate_dataset(num_same, num_diff1, num_diff2, shuffle_buffer_size, prefetch_buffer_size, batch_size, which='TRAIN'):
     if which == 'TRAIN':
@@ -24,40 +22,97 @@ def generate_dataset(num_same, num_diff1, num_diff2, shuffle_buffer_size, prefet
     return game_input_data
 
 
+def combined_rollout_step(agent_1, critic_1, feats_a1, targets_a1, message_to_a1,
+                     agent_2, critic_2, feats_a2, targets_a2, message_to_a2):
     
-def rollout_step(agent, critic, features, targets, message):
+    # rollout agent 1
+    probs_img_a1, probs_msg_a1 = agent_1(feats_a1, message_to_a1)
+    vals_a1 = critic_1(feats_a1, message_to_a1)
 
-    probs_img, probs_msg = agent(features, message)
-    vals = critic(features, message)
+    img_dist_a1 = tfp.distributions.Categorical(probs=probs_img_a1)
+    symbols_a1 = img_dist_a1.sample() 
+    img_logps_a1 =img_dist_a1.log_prob(symbols_a1)
 
-    img_dist = tfp.distributions.Categorical(probs=probs_img)
-    symbols = img_dist.sample() # (B,)
-    img_logps = img_dist.log_prob(symbols) # (B,)
+    msg_dist_a1 = tfp.distributions.Bernoulli(probs=probs_msg_a1)
+    preds_a1 = msg_dist_a1.sample()
+    msg_logps_a1 = msg_dist_a1.log_prob(preds_a1)
 
-    msg_dist = tfp.distributions.Bernoulli(probs=probs_msg)
-    preds = msg_dist.sample()
-    msg_logps = msg_dist.log_prob(preds)
+    preds_a1 = tf.cast(preds_a1, dtype=tf.float32)
 
-    preds = tf.cast(preds, dtype=tf.float32)
-    # normalized by target_num to avoid reward inflation from higher number of targets
+    num_targets_a1 = tf.reduce_sum(targets_a1)
+    correct_a1 = tf.reduce_sum(preds_a1 * targets_a1, axis=-1)  
+    rewards_a1 = correct_a1 / num_targets_a1
+    joint_logps_a1 = tf.reduce_sum(img_logps_a1, axis=-1) + tf.reduce_sum(msg_logps_a1, axis=-1)
 
-    num_targets = tf.reduce_sum(targets)
+     
+    # rollout agent 2
+    probs_img_a2, probs_msg_a2 = agent_2(feats_a2, message_to_a2)
+    vals_a2 = critic_2(feats_a2, message_to_a2)
 
-    correct = tf.reduce_sum(preds * targets, axis=-1)  
-    rewards = correct / num_targets
+    img_dist_a2 = tfp.distributions.Categorical(probs=probs_img_a2)
+    symbols_a2 = img_dist_a2.sample() 
+    img_logps_a2 = img_dist_a2.log_prob(symbols_a2)
 
-    joint_logps = tf.reduce_sum(img_logps, axis=-1) + tf.reduce_sum(msg_logps, axis=-1)
+    msg_dist_a2 = tfp.distributions.Bernoulli(probs=probs_msg_a2)
+    preds_a2 = msg_dist_a2.sample()
+    msg_logps_a2 = msg_dist_a2.log_prob(preds_a2)
 
+    preds_a2 = tf.cast(preds_a2, dtype=tf.float32)
+
+    num_targets_a2 = tf.reduce_sum(targets_a2)
+    correct_a2 = tf.reduce_sum(preds_a2 * targets_a2, axis=-1)  
+    rewards_a2 = correct_a2 / num_targets_a2
+    joint_logps_a2 = tf.reduce_sum(img_logps_a2, axis=-1) + tf.reduce_sum(msg_logps_a2, axis=-1)
+
+    # combine both rollouts into a single dictionary keyed to each agent
     return {
-        "features": features,
-        "symbols": symbols,
-        "preds": preds,
-        "img_logps": img_logps,
-        "msg_logps": msg_logps,
-        "joint_logps": joint_logps,
-        "rewards": rewards,
-        "values": vals,
+        "a1": {
+            "features": feats_a1,
+            "symbols": symbols_a1,
+            "preds": preds_a1,
+            "img_logps": img_logps_a1,
+            "msg_logps": msg_logps_a1,
+            "joint_logps": joint_logps_a1,
+            "rewards": rewards_a1,
+            "values": vals_a1,
+        },
+        "a2": {
+            "features": feats_a2,
+            "symbols": symbols_a2,
+            "preds": preds_a2,
+            "img_logps": img_logps_a2,
+            "msg_logps": msg_logps_a2,
+            "joint_logps": joint_logps_a2,
+            "rewards": rewards_a2,
+            "values": vals_a2,
+        },
     }
+
+
+def merge_rollouts(all_rollouts):
+
+    # single environment (no merge needed)
+    if len(all_rollouts) == 1:
+        return all_rollouts[0]
+
+    merged = {"a1": {}, "a2": {}, "messages": {}}
+
+    # Get keys for both agents
+    a1_keys = all_rollouts[0]["a1"].keys()
+    a2_keys = all_rollouts[0]["a2"].keys()
+
+    # Merge rollout data for each agent
+    for key in a1_keys:
+        merged["a1"][key] = tf.concat([r["a1"][key] for r in all_rollouts], axis=0)
+    for key in a2_keys:
+        merged["a2"][key] = tf.concat([r["a2"][key] for r in all_rollouts], axis=0)
+
+    if "messages" in all_rollouts[0]:
+        merged["messages"] = {
+            "to_a1": tf.concat([r["messages"]["to_a1"] for r in all_rollouts], axis=0),
+            "to_a2": tf.concat([r["messages"]["to_a2"] for r in all_rollouts], axis=0),
+        }
+    return merged
 
 
 def compute_gae(rewards, values, gamma=0.99, lam=0.95):
@@ -78,9 +133,8 @@ def compute_gae(rewards, values, gamma=0.99, lam=0.95):
 
     return returns, advs
 
-  
-def make_train_dataset(rollout_data, buffer_size, minibatch_size):
-    
+
+def make_train_dataset(rollout_data, buffer_size, minibatch_size):    
     def flatten(x):
         x_shape = tf.shape(x)
         return tf.reshape(x, tf.concat([[x_shape[0] * x_shape[1]], x_shape[2:]], axis=0))
@@ -89,7 +143,7 @@ def make_train_dataset(rollout_data, buffer_size, minibatch_size):
     a2_flat = {k: flatten(v) for k, v in rollout_data["a2"].items()}
     messages_to_a1_flat = flatten(rollout_data["messages"]["to_a1"])
     messages_to_a2_flat = flatten(rollout_data["messages"]["to_a2"])
- 
+
     dataset = tf.data.Dataset.from_tensor_slices({
         "a1": a1_flat,
         "a2": a2_flat,
@@ -175,6 +229,8 @@ def train_step(batch, agent_1, critic_1, optimizer_agent_1, optimizer_critic_1,
     return actor_loss_a1, critic_loss_a1, entropy_a1, actor_loss_a2, critic_loss_a2, entropy_a2
 
 
+        
+
 
 agent_1 = agents.AgentDummy()
 agent_2 = agents.AgentDummy()
@@ -187,93 +243,97 @@ optimizer_agent_2 = tf.keras.optimizers.Adam(1e-2) #1e-3
 optimizer_crit_1 = tf.keras.optimizers.Adam(1e-2) #1e-3
 optimizer_crit_2 = tf.keras.optimizers.Adam(1e-2) #1e-3
 
-
-def train(num_iterations=1000, batch_size=2048, minibatch_size=64, num_epochs=4):
-
-
+def train(num_iterations, num_envs, batch_size, num_minibatches, max_steps, num_epochs):
     dataset = generate_dataset(num_same=3, num_diff1=2, num_diff2=2, shuffle_buffer_size=1000, prefetch_buffer_size=1000, batch_size=batch_size, which='TRAIN')
 
+    for iter in range(num_iterations):
 
-    # create the rollout 
-    for iter in range(num_iterations): 
+        all_rollouts = []
+        
+        for k in range(num_envs):
 
-        current_ts = 0
-        total_A1_loss = 0.0
-        total_A1_crit_loss = 0.0
-        total_A2_loss = 0.0
-        total_A2_crit_loss = 0.0
+            for (feats_a1, targets_a1), (feats_a2, targets_a2) in dataset.take(num_minibatches): # m rollouts per env
+                
+                rollout_trajectory = {
+                "a1": {k: tf.TensorArray(tf.float32 if k != "symbols" else tf.int32, size=max_steps,clear_after_read=False)
+                        for k in ["features", "symbols", "preds", "img_logps", "msg_logps", "joint_logps", "rewards", "values"]},
+                "a2": {k: tf.TensorArray(tf.float32 if k != "symbols" else tf.int32, size=max_steps,clear_after_read=False)
+                        for k in ["features", "symbols", "preds", "img_logps", "msg_logps", "joint_logps", "rewards", "values"]}
+                }
+                
+                ta_messages_to_a1 = tf.TensorArray(tf.int32, size=max_steps)
+                ta_messages_to_a2 = tf.TensorArray(tf.int32, size=max_steps)
 
-        total_minibatches = 0
+                for current_ts in tf.range(max_steps): # collect multi-step trajectory  for each rollout
+                    print("current timestep: ", current_ts)
 
-        max_steps = 10
+                    message_to_a1 = tf.cond(
+                        tf.equal(current_ts, 0),
+                        lambda: tf.zeros([batch_size], dtype=tf.int32), # initial message just filled with zeros
+                        lambda: rollout_trajectory["a2"]["symbols"].read(current_ts-1)
+                        )
+                    message_to_a2 = tf.cond(
+                        tf.equal(current_ts, 0),
+                        lambda: tf.zeros([batch_size], dtype=tf.int32), # initial message just filled with zeros
+                        lambda: rollout_trajectory["a1"]["symbols"].read(current_ts-1)
+                    )
 
-        for (a1_feats, a1_targets), (a2_feats, a2_targets) in dataset:
+                    # print("message to a1: ", message_to_a1)
+                    
+                    ta_messages_to_a1 = ta_messages_to_a1.write(current_ts, message_to_a1)
+                    ta_messages_to_a2 = ta_messages_to_a2.write(current_ts, message_to_a2)
 
+                    step = combined_rollout_step(agent_1, critic_1, feats_a1, targets_a1, message_to_a1,
+                                                agent_2, critic_2, feats_a2, targets_a2, message_to_a2) # batch_size many rollouts?
+                    
+                    for key in rollout_trajectory["a1"].keys():
+                        rollout_trajectory["a1"][key] = rollout_trajectory["a1"][key].write(current_ts, step["a1"][key])
+                        rollout_trajectory["a2"][key] = rollout_trajectory["a2"][key].write(current_ts, step["a2"][key]) # write dict into tensor array
+                    
+                    # print("symbol created by a2:", rollout_trajectory["a2"]["symbols"].read(current_ts))
+
+                    
+        
+                # Stack and transpose so shape is (batch_size, timesteps, ...)
+                rollout_data = {
+                    "a1": {k: tf.transpose(rollout_trajectory["a1"][k].stack(), [1, 0, *range(2, tf.rank(rollout_trajectory["a1"][k].stack()))])
+                        for k in rollout_trajectory["a1"]},
+                    "a2": {k: tf.transpose(rollout_trajectory["a2"][k].stack(), [1, 0, *range(2, tf.rank(rollout_trajectory["a2"][k].stack()))])
+                        for k in rollout_trajectory["a2"]},
+                    "messages": {
+                        "to_a1": tf.transpose(ta_messages_to_a1.stack(), [1, 0]),
+                        "to_a2": tf.transpose(ta_messages_to_a2.stack(), [1, 0]),
+                    },
+                }
+
+                all_rollouts.append(rollout_data) # collected rollouts over k environments for training next
             
-            ta_data = {
-            "a1": {k: tf.TensorArray(tf.float32 if k != "symbols" else tf.int32, size=max_steps)
-                    for k in ["features", "symbols", "preds", "img_logps", "msg_logps", "joint_logps", "rewards", "values"]},
-            "a2": {k: tf.TensorArray(tf.float32 if k != "symbols" else tf.int32, size=max_steps)
-                    for k in ["features", "symbols", "preds", "img_logps", "msg_logps", "joint_logps", "rewards", "values"]}
-            }
+            print("current env: ", k)                        
+        rollout_data = merge_rollouts(all_rollouts)
 
-            ta_messages_to_a1 = tf.TensorArray(tf.int32, size=max_steps)
-            ta_messages_to_a2 = tf.TensorArray(tf.int32, size=max_steps)
+        last_feats_a1 = rollout_data["a1"]["features"][:, -1]
+        last_feats_a2 = rollout_data["a2"]["features"][:, -1]
+        last_msg_a1 = rollout_data["messages"]["to_a1"][:, -1]
+        last_msg_a2 = rollout_data["messages"]["to_a2"][:, -1]
 
-            for current_ts in tf.range(max_steps):
-                
-                message_to_a1 = tf.cond(
-                    tf.equal(current_ts, 0),
-                    lambda: tf.zeros([batch_size], dtype=tf.int32),  # initial messsage just filled with zeros
-                    lambda: ta_data["a2"]["symbols"].read(current_ts-1)
-                )
+        last_val_a1 = critic_1(last_feats_a1, last_msg_a1)
+        last_val_a2 = critic_2(last_feats_a2, last_msg_a2)
 
-                message_to_a2 = tf.cond(
-                    tf.equal(current_ts, 0),
-                    lambda: tf.zeros([batch_size], dtype=tf.int32),  # initial messsage just filled with zeros
-                    lambda: ta_data["a1"]["symbols"].read(current_ts-1)
-                )
-                
-                ta_messages_to_a1 = ta_messages_to_a1.write(current_ts, message_to_a1)
-                ta_messages_to_a2 = ta_messages_to_a2.write(current_ts, message_to_a2)
-                
-               # rollout step for each agent
-                step_a1 = rollout_step(agent_1, critic_1, a1_feats, a1_targets, message_to_a1)
-                step_a2 = rollout_step(agent_2, critic_2, a2_feats, a2_targets, message_to_a2)
+        all_vals_a1 = tf.concat([rollout_data["a1"]["values"], last_val_a1[:, None]], axis=1)
+        all_vals_a2 = tf.concat([rollout_data["a2"]["values"], last_val_a2[:, None]], axis=1)
+        
+        advantages_a1, returns_a1 = compute_gae(rollout_data["a1"]["rewards"],all_vals_a1)
+        advantages_a2, returns_a2 = compute_gae(rollout_data["a2"]["rewards"], all_vals_a2)
 
-                # write all keys to tensor arrays
-                for k in step_a1.keys():
-                    ta_data["a1"][k] = ta_data["a1"][k].write(current_ts, step_a1[k])
-                    ta_data["a2"][k] = ta_data["a2"][k].write(current_ts, step_a2[k])
-
-            # Stack and transpose so shape is (batch_size, timesteps, ...)
-            rollout_data = {
-                "a1": {k: tf.transpose(ta_data["a1"][k].stack(), [1, 0, *range(2, tf.rank(ta_data["a1"][k].stack()))])
-                    for k in ta_data["a1"]},
-                "a2": {k: tf.transpose(ta_data["a2"][k].stack(), [1, 0, *range(2, tf.rank(ta_data["a2"][k].stack()))])
-                    for k in ta_data["a2"]},
-                "messages": {
-                    "to_a1": tf.transpose(ta_messages_to_a1.stack(), [1, 0]),
-                    "to_a2": tf.transpose(ta_messages_to_a2.stack(), [1, 0]),
-                },
-            }
-
-        last_val_a1 = critic_1(a1_feats, message_to_a1)
-        all_a1_vals = tf.concat([rollout_data["a1"]["vals"], last_val_a1[:, None]], axis=1)  # (batch_size, total_timesteps+1)
-        returns_a1, advantages_a1 = compute_gae(rollout_data["a1"]["rewards"]  , all_a1_vals)
-
-        last_val_a2 = critic_2(a2_feats, message_to_a2)
-        all_a2_vals = tf.concat([rollout_data["a2"]["vals"], last_val_a2[:, None]], axis=1)  # (batch_size, total_timesteps+1)
-        returns_a2, advantages_a2 = compute_gae(rollout_data["a2"]["rewards"]  , all_a2_vals)
-    
-
+        
         rollout_data["a1"]["returns"] = returns_a1
         rollout_data["a1"]["advantages"] = advantages_a1
         rollout_data["a2"]["returns"] = returns_a2
         rollout_data["a2"]["advantages"] = advantages_a2
-
-        train_dataset = make_train_dataset(rollout_data, buffer_size=1000, minibatch_size=minibatch_size)
+        print("advantages a1: ", rollout_data["a1"]["advantages"])
         
+        train_dataset = make_train_dataset(rollout_data, buffer_size=1000, minibatch_size=4)
+
         for _ in range(num_epochs):
             for batch in train_dataset:
                 actor_loss_a1, critic_loss_a1, entropy_a1, actor_loss_a2, critic_loss_a2, entropy_a2 = train_step(batch, agent_1, critic_1, optimizer_agent_1, optimizer_crit_1,
@@ -282,5 +342,7 @@ def train(num_iterations=1000, batch_size=2048, minibatch_size=64, num_epochs=4)
                 tf.print("Agent 1 loss:", actor_loss_a1.numpy(), "Entropy:", entropy_a1.numpy())
                 tf.print("Agent 2 loss:", actor_loss_a2.numpy(), "Entropy:", entropy_a2.numpy())
             
-train(num_iterations=2, batch_size=2, minibatch_size=1, num_epochs=1)
-        
+
+
+train(10,4,4,4,5,2)
+
