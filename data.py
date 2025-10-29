@@ -4,6 +4,12 @@ import os
 from tqdm import tqdm
 
 def load_coco_images(data_dir="./data"):
+    """loads mscoco image into a train, val, test split
+    Args:
+        data_dir (path): The locatation where the mscoco data is saved
+    Return:
+        A tuple containing train, val, and test datasets 
+    """
     train_ds, val_ds, test_ds = tfds.load(
         "coco_captions",
         split=["train", "val", "test"], 
@@ -13,10 +19,13 @@ def load_coco_images(data_dir="./data"):
     )
     return train_ds, val_ds, test_ds
 
-# Optiion rename to save_ms_coco_vectors --> no return
-# als create_dataset mit cache & return
-def save_mscoco_resnet_image_features(dataset, save_dir=""): # put ms_coco in name
-    all_feat_vs = []
+
+def save_mscoco_resnet_image_features(dataset, save_dir=""): 
+    """saves the features of images from a mscoco style dataset into a local directory
+    Args:
+        dataset (tf.PrefetchDataset): the loaded dataset containing mscoco images
+        save_dir (path): the path to the directory to be saved in
+    """
     # Use dataset.map to preprocess all images
     def preprocess_img(element):
         image = element["image"]
@@ -26,6 +35,7 @@ def save_mscoco_resnet_image_features(dataset, save_dir=""): # put ms_coco in na
         image = tf.keras.applications.resnet50.preprocess_input(image)
         return image
     
+    all_feats_vs = []
     dataset = dataset.map(preprocess_img)
 
     resnet = tf.keras.applications.ResNet50(weights="imagenet", include_top=False, pooling="avg")
