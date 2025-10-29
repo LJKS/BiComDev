@@ -6,17 +6,6 @@ import data
 import calc_functions
 
 
-# def merge_rollout_steps(all_rollout_steps):
-#     """merge all rollout steps along the timestep axis
-    
-#     Args:
-#         all_rollout_steps (list): Contains dicts per agent that in turn contain the rollout values per step
-
-#     Return:
-#         A dictionary with fused timesteps
-#     """
-#     NotImplementedError
-
 def generate_ppo_dataset(num_same, num_diff1, num_diff2, shuffle_buffer_size, prefetch_buffer_size, batch_size, which='TRAIN'):
     """generates a dataset that contains tuples of features, target pair per agent
 

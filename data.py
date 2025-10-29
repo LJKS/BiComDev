@@ -35,7 +35,7 @@ def save_mscoco_resnet_image_features(dataset, save_dir=""):
         image = tf.keras.applications.resnet50.preprocess_input(image)
         return image
     
-    all_feats_vs = []
+    all_feat_vs = []
     dataset = dataset.map(preprocess_img)
 
     resnet = tf.keras.applications.ResNet50(weights="imagenet", include_top=False, pooling="avg")
