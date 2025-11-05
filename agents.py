@@ -26,39 +26,21 @@ class AgentDummy(tf.keras.Model):
 
     def call(self, feature_vector, input_message=None):
         
-        # def sender_fn():
-        #     img_emb = self.embed_img(feature_vector)
-        #     pooled = tf.reduce_mean(img_emb, axis=1)  # attention pooling could go here later
-        #     logits = self.vocab_logits(pooled)
-        #     return tf.nn.softmax(logits / self.temperature)
+        img_emb = self.embed_img(feature_vector)
+        pooled = tf.reduce_mean(img_emb, axis=1)  # attention pooling could go here later
+        logits = self.vocab_logits(pooled)
+        logits_sm = tf.nn.softmax(logits / self.temperature)
 
-        # def receiver_fn():
-        #     img_emb = self.embed_img(feature_vector)  
-        #     msg_emb = self.embed_symbol(input_message) 
-        #     msg_emb = tf.expand_dims(msg_emb, axis=1)   
+        msg_emb = self.embed_symbol(input_message) 
+        msg_emb = tf.expand_dims(msg_emb, axis=1)   
 
-        #     dot = tf.reduce_sum(img_emb * msg_emb, axis=-1)  
-        #     return tf.nn.sigmoid(dot) # tf.nn.softmax(dot / self.temperature)
-        
-        def combined():
-            img_emb = self.embed_img(feature_vector)
-            pooled = tf.reduce_mean(img_emb, axis=1)  # attention pooling could go here later
-            logits = self.vocab_logits(pooled)
-            logits_sm = tf.nn.softmax(logits / self.temperature)
+        # print("img_emb shape:", img_emb.shape)
+        # print("msg_emb shape:", msg_emb.shape)
 
-            msg_emb = self.embed_symbol(input_message) 
-            msg_emb = tf.expand_dims(msg_emb, axis=1)   
+        dot = tf.reduce_sum(img_emb * msg_emb, axis=-1)  
+        dot_sig = tf.nn.sigmoid(dot) # tf.nn.softmax(dot / self.temperature)
 
-            # print("img_emb shape:", img_emb.shape)
-            # print("msg_emb shape:", msg_emb.shape)
-
-            dot = tf.reduce_sum(img_emb * msg_emb, axis=-1)  
-            dot_sig = tf.nn.sigmoid(dot) # tf.nn.softmax(dot / self.temperature)
-
-            return logits_sm, dot_sig
-
-        return combined()
-        # return tf.cond(tf.equal(role, 0), sender_fn, receiver_fn)
+        return logits_sm, dot_sig
 
 class AgentDummyCritic(tf.keras.Model):
     def __init__(self, embed_dim=50, vocab_size=10):

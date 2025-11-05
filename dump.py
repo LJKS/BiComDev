@@ -72,6 +72,7 @@ def rollout_step(agent, critic, features, targets, input_message, reward_functio
     Returns:
         A list of dicts containing values collected during each rollout step
             - features: the same features from the input
+            - input_messages: the same message from the input
             - output_messages: message sampled from 
             - preds: the agents prediction on what images are targets
             - img_logps:log probabilities based on the probability distribution over the images
@@ -99,6 +100,7 @@ def rollout_step(agent, critic, features, targets, input_message, reward_functio
 
     return {
          "features": features, 
+         "input_messages": input_message,
          "output_messages": output_messages,
          "preds": preds,
          "img_logps": img_logps,
@@ -128,8 +130,8 @@ def do_n_rollout_steps(agent_1, critic_1, features_a1, targets_a1,
     batch_size = tf.shape(features_a1)[0]
 
     two_agents_rollout = {
-        "agent_1": {key: [] for key in ["features", "output_messages", "preds", "img_logps", "msg_logps", "joint_logps", "rewards", "values"]},
-        "agent_2": {key: [] for key in ["features", "output_messages", "preds", "img_logps", "msg_logps", "joint_logps", "rewards", "values"]},
+        "agent_1": {key: [] for key in ["features", "input_messages", "output_messages", "preds", "img_logps", "msg_logps", "joint_logps", "rewards", "values"]},
+        "agent_2": {key: [] for key in ["features", "input_messages", "output_messages", "preds", "img_logps", "msg_logps", "joint_logps", "rewards", "values"]},
     }
 
     for step in range(num_steps):
@@ -203,14 +205,15 @@ def merge_rollouts(k_rollouts):
             
 
             merged_rollouts[a][key] = merged
-        print("length of rewards after merged k rollouts :", merged_rollouts["agent_1"]["rewards"].shape)
+        print("length of output_messages after merged k rollouts :", merged_rollouts["agent_1"]["output_messages"].shape)
+        print("length of input_messages after merged k rollouts :", merged_rollouts["agent_1"]["input_messages"].shape)
 
     return merged_rollouts
 
 def prepare_ppo_information(merged, critic_1, critic_2):
     """Calculates and adds addvantage and return information to the merged rollout dictionary
     Args:
-        merged (dict): contains aaaaaaaaall the rollout info <3
+        merged (dict): Dictionary that contains the merges rollout information
         critic_1, critc_2 (tf.keras.Model): Reinforcement learning critics from agents.py; here for advantages bootstrapping
         
     Return:

@@ -29,10 +29,16 @@ def compute_gae(rewards, values, gamma=0.99, lam=0.95):
     return returns, advs
 
 
-
 def target_match_ratio(preds, targets):
     """a reward function that """
     num_targets = tf.reduce_sum(targets)
     correct = tf.reduce_sum(preds * targets, axis=-1)  
     rewards = correct / num_targets
     return rewards
+
+
+
+def initialize_optimizer_slots(optimizer, model):
+    zero_grads = [tf.zeros_like(v) for v in model.trainable_variables]
+    optimizer.apply_gradients(zip(zero_grads, model.trainable_variables))
+
