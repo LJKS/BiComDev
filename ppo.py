@@ -251,15 +251,6 @@ def train_step(rollout_data,
                 agent, critic, optimizer_agent, optimizer_critic, 
                 clip_epsilon=0.2, entropy_coef=0.01, which_agent=""):
     """train step for PPO training between two agents in a bidiriectional multistep referential game
-   agent (tf.keras.Model): A reinforcement learning agent from agents.py
-        critic (tf.keras.Model): A reinforcement learning critic from agents.py
-        features (tensor): A set of features describing images seen by the agent; shape [batch_size, num_imgs, feature_dim]
-        targets (tensor): A binary tensor that details whether a feature tensor is a target (=1) or not (=0); shape [batch_size, num_img]
-        input_message (tensor): A tensor of discrete symbols that was sent by the other agent (or an initial message); shape [batch_size, message_length]
-        num_steps (int): The number of steps the agents takes before the game is terminated
-        reward_function (function): some reward function based on correct target prediction 
-            - takes predictions and targets as inputs
-
      Args:
         rollout_data (tf.dataset): A tf.dataset that contains all PPO information from the rollout relevant for the training step
         agent (tf.keras.Model):  A reinforcement learning agent from agents.py
