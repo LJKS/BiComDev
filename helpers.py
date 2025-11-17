@@ -15,15 +15,16 @@ def compute_gae(rewards, values, gamma=0.99, lam=0.95):
     batch_size = tf.shape(rewards)[0]
     total_timesteps = tf.shape(rewards)[1]
 
-    advs = [] # tf.TensorArray(tf.float32, size=total_timesteps)
+    advs = [] 
     gae = tf.zeros((batch_size,), dtype=tf.float32)
+    
 
     for t in reversed(range(total_timesteps)): # loop backwards
-        delta = rewards[:, t] + gamma * values[:, t+1] - values[:, t]
+        delta = rewards[:, t] + gamma * values[:, t+1] - values[:, t] 
         gae = delta + gamma * lam * gae
         advs.append(gae)
 
-    advs = tf.stack(advs[::-1], axis=1) # stack in revered order 
+    advs = tf.stack(advs[::-1], axis=1) # stack in reversed order 
     returns = advs + values[:, :-1]  
 
     return returns, advs

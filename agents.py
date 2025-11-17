@@ -1,79 +1,73 @@
 import tensorflow as tf
 
-# intstantiation of the agent networks, actor and critic PPO framework
-# - both agents should have the same structure for symmetry (just as two humans in a conversation have (broadly) the same level of cognitive functions at their disposal)
-
-
-# agent_1 actor
-
-# agent_1 critic
-
-# agent_2 actor
-
-# agent_2 critic
-
-
-# adjusted agents from unidirectional version as dummy agents
-
-class AgentDummy(tf.keras.Model):
-    def __init__(self, embed_dim=50, vocab_size=10, temperature=10.0):
+class AgentActor(tf.keras.Model):
+    def __init__(self, embed_dim=50, vocab_size=10, lstm_units=128):
         super().__init__()
-        self.temperature = temperature
-        self.embed_img = tf.keras.layers.Dense(embed_dim, activation='sigmoid') # should be sigmoid to mirror paper
-        self.vocab_logits = tf.keras.layers.Dense(vocab_size)
-        self.embed_symbol = tf.keras.layers.Embedding(input_dim=vocab_size, output_dim=embed_dim)
+
+        self.img_embed = tf.keras.layers.Dense(embed_dim, activation='sigmoid')
+        self.msg_embed = tf.keras.layers.Embedding(vocab_size, embed_dim)
+
+        self.lstm = tf.keras.layers.LSTM(lstm_units, return_sequences=True, return_state=True)
+
+        self.img_proj = tf.keras.layers.Dense(lstm_units)
+
+        self.msg_logits_layer = tf.keras.layers.Dense(vocab_size)
 
 
-    def call(self, feature_vector, input_message=None):
-        
-        img_emb = self.embed_img(feature_vector)
-        pooled = tf.reduce_mean(img_emb, axis=1)  # attention pooling could go here later
-        logits = self.vocab_logits(pooled)
-        logits_sm = tf.nn.softmax(logits / self.temperature)
 
-        msg_emb = self.embed_symbol(input_message) 
-        msg_emb = tf.expand_dims(msg_emb, axis=1)   
+    def call(self, feature_vector, input_message, prev_state):
 
-        # print("img_emb shape:", img_emb.shape)
-        # print("msg_emb shape:", msg_emb.shape)
+        img_emb = self.img_embed(feature_vector)    # [batch_size, num_img, emb_dim]
+        msg_emb = self.msg_embed(input_message)     # [batch_size, emb_dim]
+        # add dimension for later concat
+        msg_emb = tf.expand_dims(msg_emb, axis=1)   # [batch_size, 1, emb_dim]
 
-        dot = tf.reduce_sum(img_emb * msg_emb, axis=-1)  
-        dot_sig = tf.nn.sigmoid(dot) # tf.nn.softmax(dot / self.temperature)
+        # combine inputs to feed into lstm
+        combined = tf.concat([img_emb, msg_emb], axis=1)
 
-        return logits_sm, dot_sig
+        lstm_output, h, c = self.lstm(combined, initial_state=prev_state)
+        last_output = lstm_output[:, -1, :]         # [batch, lstm_units]
+        last_output_exp = tf.expand_dims(last_output, axis=1)
+        # projecting for shape match to lstm output
+        img_emb_proj = self.img_proj(img_emb)
+        # compute similarity between image embedding and lstm output for target prediction
+        cos_sim = -tf.keras.losses.cosine_similarity(img_emb_proj, last_output_exp)
+        # get target prediction 
+        target_probs = tf.nn.softmax(cos_sim, axis=-1)  # [batch, num_images]
+        # get logits for message
+        msg_logits = self.msg_logits_layer(tf.squeeze(last_output))  # [batch, vocab_size]
+        # create output_message
+        output_message = tf.nn.softmax(msg_logits, axis=-1)
 
-class AgentDummyCritic(tf.keras.Model):
-    def __init__(self, embed_dim=50, vocab_size=10):
+        return target_probs, output_message, (h,c)
+    
+
+class AgentCritic(tf.keras.Model):
+    def __init__(self, embed_dim=50, vocab_size=10, lstm_units=128):
         super().__init__()
-        self.embed_img = tf.keras.layers.Dense(embed_dim, activation="sigmoid")
-        self.embed_symbol = tf.keras.layers.Embedding(input_dim=vocab_size, output_dim=embed_dim)
+
+        self.img_embed = tf.keras.layers.Dense(embed_dim, activation='sigmoid')
+        self.msg_embed = tf.keras.layers.Embedding(vocab_size, embed_dim)
+
+        self.lstm = tf.keras.layers.LSTM(lstm_units, return_sequences=True, return_state=True)
+
         self.value_head = tf.keras.layers.Dense(1)
 
-    def call(self, feature_tensor, input_message):
-        img_emb = self.embed_img(feature_tensor)
-        pooled = tf.reduce_mean(img_emb, axis=1)
 
-        msg_emb = self.embed_symbol(input_message)
-        h = tf.concat([pooled, msg_emb], axis=-1)
+    def call(self, feature_vector, input_message, prev_state):
 
-        value = tf.squeeze(self.value_head(h), axis=-1)  # (B,)
-        return value
+        img_emb = self.img_embed(feature_vector)    # [batch_size, num_img, emb_dim]
+        msg_emb = self.msg_embed(input_message)     # [batch_size, emb_dim]
+        # add dimension for later concat
+        msg_emb = tf.expand_dims(msg_emb, axis=1)   # [batch_size, 1, emb_dim]
 
-    
-        # def sender_crit_fn():
-        #     img_emb = self.embed_img(feature_tensor)
-        #     pooled = tf.reduce_mean(img_emb, axis=1) 
-        #     value = tf.squeeze(self.value_head(pooled), axis=-1)
-        #     return value
+        # combine inputs to feed into lstm
+        combined = tf.concat([img_emb, msg_emb], axis=1)
 
-        # def receiver_crit_fn():
-        #     img_emb = self.embed_img(feature_tensor)       
-        #     pooled = tf.reduce_mean(img_emb, axis=1)       
-        #     msg_emb = self.embed_symbol(input_message)     
-        #     h = tf.concat([pooled, msg_emb], axis=-1)     
-        #     value = tf.squeeze(self.value_head_receiver(h), axis=-1)
-        #     return value
+        lstm_output, h, c = self.lstm(combined, initial_state=prev_state)
+        last_output = lstm_output[:, -1, :]         # [batch_size, lstm_units]
 
-        # return tf.cond(tf.equal(role, 0), sender_crit_fn, receiver_crit_fn)
+        val = tf.squeeze(self.value_head(last_output)) # [batch_size,]
 
 
+        return val, (h,c)
