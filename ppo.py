@@ -314,9 +314,6 @@ def rollouts_to_dataset(merged, buffer_size, batch_size):
     a1_flat = {k: flatten(v) for k, v in merged["agent_1"].items()}
     a2_flat = {k: flatten(v) for k, v in merged["agent_2"].items()}
 
-    for key, value in a1_flat.items():
-        print(f"  {key}: {value.shape}")
-
 
     dataset = tf.data.Dataset.from_tensor_slices({
         "agent_1": a1_flat,                         # each key now has (batch_size*(num_steps*k)) as first dimension
@@ -361,7 +358,6 @@ def train_step(rollout_data,
 
         joint_logps = tf.reduce_sum(img_logps, axis=-1)  + msg_logps
         ratios = tf.exp(joint_logps - rollout_data[which_agent]["joint_logps"])
-        print("joint logps shape and ratio shape: ", joint_logps.shape, rollout_data[which_agent]["joint_logps"], ratios)
         entropy = tf.reduce_mean(img_dist.entropy()) + tf.reduce_sum(msg_logps, axis=-1)
 
         unclipped = ratios * rollout_data[which_agent]["advantages"]
@@ -380,9 +376,6 @@ def train_step(rollout_data,
     
     agent_grads = tape.gradient(actor_loss, agent.trainable_variables)
     critic_grads = tape.gradient(critic_loss, critic.trainable_variables)
-
-    for g, v in zip(agent_grads, agent.trainable_variables):
-        tf.print(v.name, "grad norm:", tf.norm(g))
     
     del tape
 
@@ -461,13 +454,15 @@ def train(agent_1, agent_2, critic_1, critic_2,
             critic_losses_1 = critic_losses_1.write(i, critic_loss_1)
             actor_losses_2 = actor_losses_2.write(i, actor_loss_2)
             critic_losses_2 = critic_losses_2.write(i, critic_loss_2)
+
+            print("Actor loss agent 1: ", actor_loss_1)
         
     # Stack TensorArrays to tensors
     actor_losses_1 = actor_losses_1.stack()
     critic_losses_1 = critic_losses_1.stack()
     actor_losses_2 = actor_losses_2.stack()
     critic_losses_2 = critic_losses_2.stack()
-    
+
     return actor_losses_1, critic_losses_1, actor_losses_2, critic_losses_2
  
 actor_losses_1, critic_losses_1, actor_losses_2, critic_losses_2 = train(agent_1, agent_2, critic_1, critic_2, 
@@ -478,4 +473,4 @@ actor_losses_1, critic_losses_1, actor_losses_2, critic_losses_2 = train(agent_1
                                                                             num_steps=128, num_envs=8, num_epochs=2)
 
 
-print(actor_losses_1)
+
