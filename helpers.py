@@ -38,7 +38,6 @@ def target_match_ratio(preds, targets):
     return rewards
 
 
-
 def initialize_optimizer_slots(optimizer, model):
     zero_grads = [tf.zeros_like(v) for v in model.trainable_variables]
     optimizer.apply_gradients(zip(zero_grads, model.trainable_variables))

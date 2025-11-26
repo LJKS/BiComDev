@@ -9,7 +9,7 @@ class AgentActor(tf.keras.Model):
 
         self.lstm = tf.keras.layers.LSTM(lstm_units, return_sequences=True, return_state=True)
 
-        self.img_proj = tf.keras.layers.Dense(lstm_units)
+        self.lstm_proj = tf.keras.layers.Dense(embed_dim)
 
         self.msg_logits_layer = tf.keras.layers.Dense(vocab_size)
 
@@ -19,23 +19,27 @@ class AgentActor(tf.keras.Model):
 
         img_emb = self.img_embed(feature_vector)    # [batch_size, num_img, emb_dim]
         msg_emb = self.msg_embed(input_message)     # [batch_size, emb_dim]
-        # add dimension for later concat
-        msg_emb = tf.expand_dims(msg_emb, axis=1)   # [batch_size, 1, emb_dim]
+       
+        img_emb_reduced = tf.reduce_sum(img_emb, axis=1)    # [batch_size, emb_dim]
 
         # combine inputs to feed into lstm
-        combined = tf.concat([img_emb, msg_emb], axis=1)
+        combined = tf.concat([img_emb_reduced, msg_emb], axis=1)    # [batch_size, emb_dim*2]
+        combined = tf.expand_dims(combined, axis=1)         # [batch_size, 1, emb_dim*2]
 
         lstm_output, h, c = self.lstm(combined, initial_state=prev_state)
         last_output = lstm_output[:, -1, :]         # [batch, lstm_units]
-        last_output_exp = tf.expand_dims(last_output, axis=1)
-        # projecting for shape match to lstm output
-        img_emb_proj = self.img_proj(img_emb)
+
+        # projecting for shape match to image embedding
+        lstm_output_proj = self.lstm_proj(lstm_output)
+
+        print("lstm output shape: ", lstm_output_proj.shape)
         # compute similarity between image embedding and lstm output for target prediction
-        cos_sim = -tf.keras.losses.cosine_similarity(img_emb_proj, last_output_exp)
+        cos_sim = -tf.keras.losses.cosine_similarity(img_emb, lstm_output_proj)
+
         # get target prediction 
-        target_probs = tf.nn.softmax(cos_sim, axis=-1)  # [batch, num_images]
+        target_probs = tf.nn.sigmoid(cos_sim)  # [batch, num_images]
         # get logits for message
-        msg_logits = self.msg_logits_layer(tf.squeeze(last_output))  # [batch, vocab_size]
+        msg_logits = self.msg_logits_layer(last_output)  # [batch, vocab_size]
         # create output_message
         output_message = tf.nn.softmax(msg_logits, axis=-1)
 
@@ -71,3 +75,6 @@ class AgentCritic(tf.keras.Model):
 
 
         return val, (h,c)
+    
+
+

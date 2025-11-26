@@ -13,7 +13,7 @@ def generate_dummy_ppo_dataset(
     prefetch_buffer_size,
     batch_size,
     which="TRAIN",
-    feature_dim=2048):
+    feature_dim=16):
     """
     Returns batches of one-hot features shaped like:
         [num_same + num_diff1 + num_diff2, feature_dim]
@@ -66,7 +66,7 @@ def generate_ppo_dataset(num_same, num_diff1, num_diff2, shuffle_buffer_size, pr
         path = os.path.join(os.getcwd(), "saved_data/val")
 
     dataset = tf.data.Dataset.load(path)
-    game_input_ds = data.create_game_instances_dataset(dataset, num_same, num_diff1, num_diff2, shuffle_buffer_size)
+    game_input_ds = data.create_game_instances_dataset(dataset, num_same, num_diff1, num_diff2)
 
     game_input_ds = game_input_ds.shuffle(shuffle_buffer_size)
     game_input_ds = game_input_ds.batch(batch_size)
@@ -178,8 +178,8 @@ def do_n_rollout_steps(agent_1, critic_1, features_a1, targets_a1,
             prev_state_actor_c_a2 = two_agents_rollout["agent_2"]["prev_state_actor_c"][step-1]
 
             prev_state_critic_h_a1 = two_agents_rollout["agent_1"]["prev_state_critic_h"][step-1]
-            prev_state_critic_c_a2 = two_agents_rollout["agent_1"]["prev_state_critic_c"][step-1]
-            prev_state_critic_h_a1 = two_agents_rollout["agent_2"]["prev_state_critic_h"][step-1]
+            prev_state_critic_c_a1 = two_agents_rollout["agent_1"]["prev_state_critic_c"][step-1]
+            prev_state_critic_h_a2 = two_agents_rollout["agent_2"]["prev_state_critic_h"][step-1]
             prev_state_critic_c_a2 = two_agents_rollout["agent_2"]["prev_state_critic_c"][step-1]
 
 
@@ -358,7 +358,7 @@ def train_step(rollout_data,
 
         joint_logps = tf.reduce_sum(img_logps, axis=-1)  + msg_logps
         ratios = tf.exp(joint_logps - rollout_data[which_agent]["joint_logps"])
-        entropy = tf.reduce_mean(img_dist.entropy()) + tf.reduce_sum(msg_logps, axis=-1)
+        entropy = tf.reduce_mean(img_dist.entropy()) + tf.reduce_mean(msg_dist.entropy())
 
         unclipped = ratios * rollout_data[which_agent]["advantages"]
         clipped = tf.clip_by_value(ratios, 1 - clip_epsilon, 1 + clip_epsilon) * rollout_data[which_agent]["advantages"]
@@ -388,82 +388,91 @@ agent_2 = agents.AgentActor()
 critic_1 = agents.AgentCritic()
 critic_2 = agents.AgentCritic()
 
+actor_lr = 3e-4
+critic_lr = 1e-3
+optimizer_agent_1 = tf.keras.optimizers.Adam(actor_lr) 
+optimizer_agent_2 = tf.keras.optimizers.Adam(actor_lr) 
+optimizer_crit_1 = tf.keras.optimizers.Adam(critic_lr) 
+optimizer_crit_2 = tf.keras.optimizers.Adam(critic_lr) 
 
-optimizer_agent_1 = tf.keras.optimizers.Adam(1e-2) #1e-3
-optimizer_agent_2 = tf.keras.optimizers.Adam(1e-2) #1e-3
-optimizer_crit_1 = tf.keras.optimizers.Adam(1e-2) #1e-3
-optimizer_crit_2 = tf.keras.optimizers.Adam(1e-2) #1e-3
+dummy_features = tf.zeros([1, 10, 2048])  
+dummy_msg = tf.zeros([1], dtype=tf.int32)
 
+dummy_h = tf.zeros([1, agent_1.lstm.units])
+dummy_c = tf.zeros([1, agent_1.lstm.units])
+
+agent_1(dummy_features, dummy_msg, (dummy_h, dummy_c))
+agent_2(dummy_features, dummy_msg, (dummy_h, dummy_c))
+critic_1(dummy_features, dummy_msg, (dummy_h, dummy_c))
+critic_2(dummy_features, dummy_msg, (dummy_h, dummy_c))
+
+# explicitly initializing optimizer slots to avoid singleton variable error (due to train_step call with second model)
+helpers.initialize_optimizer_slots(optimizer_agent_1, agent_1)
+helpers.initialize_optimizer_slots(optimizer_crit_1, critic_1)
+helpers.initialize_optimizer_slots(optimizer_agent_2, agent_2)
+helpers.initialize_optimizer_slots(optimizer_crit_2, critic_2)
 
 def train(agent_1, agent_2, critic_1, critic_2, 
           optimizer_agent_1,optimizer_agent_2,optimizer_crit_1,optimizer_crit_2, 
           num_same, num_diff1, num_diff2, shuffle_buffer_size, prefetch_buffer_size, batch_size, which_dataset,
           num_steps, num_envs, num_epochs):
     
-    # dataset = generate_ppo_dataset(num_same=num_same, num_diff1=num_diff1, num_diff2=num_diff2, 
-    #                                 shuffle_buffer_size=shuffle_buffer_size, prefetch_buffer_size=prefetch_buffer_size, batch_size=batch_size, which=which_dataset)
-    dataset = generate_dummy_ppo_dataset(num_same=num_same, num_diff1=num_diff1, num_diff2=num_diff2, 
-                                    shuffle_buffer_size=shuffle_buffer_size, prefetch_buffer_size=prefetch_buffer_size, batch_size=batch_size, which=which_dataset)
+    ppo_updates_per_epoch = 4
+    i = 0
 
-    k_rollouts = do_k_rollouts(dataset, 
-                             agent_1, critic_1, 
-                             agent_2, critic_2, 
-                             reward_function=helpers.target_match_ratio, 
-                             num_steps=num_steps, num_envs=num_envs)
-    merged_rollouts = merge_rollouts(k_rollouts)
-                
-    merged_rollouts = prepare_ppo_information(merged_rollouts, critic_1, critic_2)
-    
-    rollout_dataset = rollouts_to_dataset(merged_rollouts, buffer_size=shuffle_buffer_size, batch_size=batch_size)
-
-    # explicitly initializing optimizer slots to avoid singleton variable error (due to train_step call with second model)
-    helpers.initialize_optimizer_slots(optimizer_agent_1, agent_1)
-    helpers.initialize_optimizer_slots(optimizer_crit_1, critic_1)
-    helpers.initialize_optimizer_slots(optimizer_agent_2, agent_2)
-    helpers.initialize_optimizer_slots(optimizer_crit_2, critic_2)
-
-
-    # Convert dataset to iterator (can be repeated and prefetched)
-    iterator = iter(rollout_dataset)
-    num_batches = tf.data.experimental.cardinality(rollout_dataset)
-    
     # TensorArrays to store losses
-    actor_losses_1 = tf.TensorArray(tf.float32, size=num_batches, element_shape=None)
-    critic_losses_1 = tf.TensorArray(tf.float32, size=num_batches, element_shape=None)
-    actor_losses_2 = tf.TensorArray(tf.float32, size=num_batches, element_shape=None)
-    critic_losses_2 = tf.TensorArray(tf.float32, size=num_batches, element_shape=None)
-    
+    actor_losses_1 = tf.TensorArray(tf.float32, size=0, dynamic_size=True)
+    critic_losses_1 = tf.TensorArray(tf.float32, size=0, dynamic_size=True)
+    actor_losses_2 = tf.TensorArray(tf.float32, size=0, dynamic_size=True)
+    critic_losses_2 = tf.TensorArray(tf.float32, size=0, dynamic_size=True)
+
     for epoch in tf.range(num_epochs):
-        iterator = iter(rollout_dataset)  # reset iterator each epoch
-        for i in tf.range(num_batches):
-            batch = next(iterator)
-            
-            # Train agent 1
-            actor_loss_1, critic_loss_1 = train_step(batch, agent_1, critic_1,
-                                                    optimizer_agent_1, optimizer_crit_1,
-                                                    clip_epsilon=0.2, entropy_coef=0.01,
-                                                    which_agent="agent_1")
-            # Train agent 2
-            actor_loss_2, critic_loss_2 = train_step(batch, agent_2, critic_2,
-                                                    optimizer_agent_2, optimizer_crit_2,
-                                                    clip_epsilon=0.2, entropy_coef=0.01,
-                                                    which_agent="agent_2")
-            
-            # Write into TensorArrays
-            actor_losses_1 = actor_losses_1.write(i, actor_loss_1)
-            critic_losses_1 = critic_losses_1.write(i, critic_loss_1)
-            actor_losses_2 = actor_losses_2.write(i, actor_loss_2)
-            critic_losses_2 = critic_losses_2.write(i, critic_loss_2)
+        dataset = generate_ppo_dataset(num_same=num_same, num_diff1=num_diff1, num_diff2=num_diff2, 
+                                        shuffle_buffer_size=shuffle_buffer_size, prefetch_buffer_size=prefetch_buffer_size, batch_size=batch_size, which=which_dataset)
+        # dataset = generate_dummy_ppo_dataset(num_same=num_same, num_diff1=num_diff1, num_diff2=num_diff2, 
+        #                                 shuffle_buffer_size=shuffle_buffer_size, prefetch_buffer_size=prefetch_buffer_size, batch_size=batch_size, which=which_dataset)
 
-            print("Actor loss agent 1: ", actor_loss_1)
+        k_rollouts = do_k_rollouts(dataset, 
+                                agent_1, critic_1, 
+                                agent_2, critic_2, 
+                                reward_function=helpers.target_match_ratio, 
+                                num_steps=num_steps, num_envs=num_envs)
+        merged_rollouts = merge_rollouts(k_rollouts)
+                    
+        merged_rollouts = prepare_ppo_information(merged_rollouts, critic_1, critic_2)
         
-    # Stack TensorArrays to tensors
-    actor_losses_1 = actor_losses_1.stack()
-    critic_losses_1 = critic_losses_1.stack()
-    actor_losses_2 = actor_losses_2.stack()
-    critic_losses_2 = critic_losses_2.stack()
+        rollout_dataset = rollouts_to_dataset(merged_rollouts, buffer_size=shuffle_buffer_size, batch_size=batch_size)
 
-    return actor_losses_1, critic_losses_1, actor_losses_2, critic_losses_2
+        for update in range(ppo_updates_per_epoch):
+            for batch in rollout_dataset:
+                i = i+1
+
+                # Train agent 1
+                actor_loss_1, critic_loss_1 = train_step(batch, agent_1, critic_1,
+                                                        optimizer_agent_1, optimizer_crit_1,
+                                                        clip_epsilon=0.2, entropy_coef=0.01,
+                                                        which_agent="agent_1")
+                # Train agent 2
+                actor_loss_2, critic_loss_2 = train_step(batch, agent_2, critic_2,
+                                                        optimizer_agent_2, optimizer_crit_2,
+                                                        clip_epsilon=0.2, entropy_coef=0.01,
+                                                        which_agent="agent_2")
+                
+                # Write into TensorArrays
+                actor_losses_1 = actor_losses_1.write(i, actor_loss_1)
+                critic_losses_1 = critic_losses_1.write(i, critic_loss_1)
+                actor_losses_2 = actor_losses_2.write(i, actor_loss_2)
+                critic_losses_2 = critic_losses_2.write(i, critic_loss_2)
+
+                print("Actor loss agent 1: ", actor_loss_1)
+            
+        # Stack TensorArrays to tensors
+        actor_losses_1 = actor_losses_1.stack()
+        critic_losses_1 = critic_losses_1.stack()
+        actor_losses_2 = actor_losses_2.stack()
+        critic_losses_2 = critic_losses_2.stack()
+
+        return actor_losses_1, critic_losses_1, actor_losses_2, critic_losses_2
  
 actor_losses_1, critic_losses_1, actor_losses_2, critic_losses_2 = train(agent_1, agent_2, critic_1, critic_2, 
                                                                             optimizer_agent_1,optimizer_agent_2,optimizer_crit_1,optimizer_crit_2, 
@@ -472,5 +481,6 @@ actor_losses_1, critic_losses_1, actor_losses_2, critic_losses_2 = train(agent_1
                                                                             which_dataset='TRAIN',
                                                                             num_steps=128, num_envs=8, num_epochs=2)
 
+print(actor_losses_1)
 
 
