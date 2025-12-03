@@ -113,7 +113,7 @@ def rollout_step(agent, critic, features, targets, input_message, prev_state_act
     preds = tf.cast(preds, dtype=tf.float32)
 
     rewards = reward_function(preds, targets)
-    joint_logps = tf.reduce_sum(img_logps, axis=-1) + msg_logps
+    joint_logps = tf.reduce_sum(img_logps, axis=-1) + tf.reduce_sum(msg_logps, axis=-1)
     
     return {
          "features": features,                  # [batch_size, num_imgs, feature_dim]
@@ -156,8 +156,8 @@ def do_n_rollout_steps(agent_1, critic_1, features_a1, targets_a1,
     for step in range(num_steps):
         
         if step == 0:
-            input_message_a1 = tf.zeros([batch_size], dtype=tf.int32)   # To do: adjust to longer message length
-            input_message_a2 = tf.zeros([batch_size], dtype=tf.int32)   # To do: adjust to longer message length
+            input_message_a1 = tf.zeros([batch_size, agent_1.msg_len], dtype=tf.int32)   # To do: adjust to longer message length
+            input_message_a2 = tf.zeros([batch_size, agent_2.msg_len], dtype=tf.int32)   # To do: adjust to longer message length
             
             prev_state_actor_h_a1 = tf.zeros([batch_size, agent_1.lstm.units])
             prev_state_actor_c_a1 = tf.zeros([batch_size, agent_1.lstm.units])
@@ -356,7 +356,10 @@ def train_step(rollout_data,
         msg_logps = msg_dist.log_prob(rollout_data[which_agent]["output_messages"])
 
 
-        joint_logps = tf.reduce_sum(img_logps, axis=-1)  + msg_logps
+        joint_logps = tf.reduce_sum(img_logps, axis=-1)  + tf.reduce_sum(msg_logps, axis=-1)     
+        print("img logps shapes: ",img_logps.shape, tf.reduce_sum(img_logps, axis=-1).shape)
+        print("msg logps shapes: ", msg_logps.shape, tf.reduce_sum(msg_logps, axis=-1).shape)
+        
         ratios = tf.exp(joint_logps - rollout_data[which_agent]["joint_logps"])
         entropy = tf.reduce_mean(img_dist.entropy()) + tf.reduce_mean(msg_dist.entropy())
 
@@ -395,8 +398,8 @@ optimizer_agent_2 = tf.keras.optimizers.Adam(actor_lr)
 optimizer_crit_1 = tf.keras.optimizers.Adam(critic_lr) 
 optimizer_crit_2 = tf.keras.optimizers.Adam(critic_lr) 
 
-dummy_features = tf.zeros([1, 10, 2048])  
-dummy_msg = tf.zeros([1], dtype=tf.int32)
+dummy_features = tf.zeros([1, 10, 16])  
+dummy_msg = tf.zeros([1, 3], dtype=tf.int32)
 
 dummy_h = tf.zeros([1, agent_1.lstm.units])
 dummy_c = tf.zeros([1, agent_1.lstm.units])
@@ -427,10 +430,10 @@ def train(agent_1, agent_2, critic_1, critic_2,
     critic_losses_2 = tf.TensorArray(tf.float32, size=0, dynamic_size=True)
 
     for epoch in tf.range(num_epochs):
-        dataset = generate_ppo_dataset(num_same=num_same, num_diff1=num_diff1, num_diff2=num_diff2, 
-                                        shuffle_buffer_size=shuffle_buffer_size, prefetch_buffer_size=prefetch_buffer_size, batch_size=batch_size, which=which_dataset)
-        # dataset = generate_dummy_ppo_dataset(num_same=num_same, num_diff1=num_diff1, num_diff2=num_diff2, 
+        # dataset = generate_ppo_dataset(num_same=num_same, num_diff1=num_diff1, num_diff2=num_diff2, 
         #                                 shuffle_buffer_size=shuffle_buffer_size, prefetch_buffer_size=prefetch_buffer_size, batch_size=batch_size, which=which_dataset)
+        dataset = generate_dummy_ppo_dataset(num_same=num_same, num_diff1=num_diff1, num_diff2=num_diff2, 
+                                        shuffle_buffer_size=shuffle_buffer_size, prefetch_buffer_size=prefetch_buffer_size, batch_size=batch_size, which=which_dataset)
 
         k_rollouts = do_k_rollouts(dataset, 
                                 agent_1, critic_1, 
