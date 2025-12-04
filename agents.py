@@ -3,14 +3,13 @@ import tensorflow as tf
 class AgentActor(tf.keras.Model):
     def __init__(self, embed_dim=50, vocab_size=10, lstm_units=128, msg_len=3):
         super().__init__()
-
         self.msg_len = msg_len
         self.vocab_size = vocab_size
+        
         self.img_embed = tf.keras.layers.Dense(embed_dim, activation='sigmoid')
         self.msg_embed = tf.keras.layers.Embedding(vocab_size, embed_dim)
         self.lstm = tf.keras.layers.LSTM(lstm_units, return_sequences=True, return_state=True)
         self.lstm_proj = tf.keras.layers.Dense(embed_dim)
-        # self.msg_logits_layer = tf.keras.layers.Dense(vocab_size)
         self.output_msg_dense = tf.keras.layers.Dense(vocab_size*msg_len)
 
 
@@ -123,7 +122,6 @@ class AgentCritic(tf.keras.Model):
 
         msg_emb_reduced = tf.reduce_sum(msg_emb, axis=2)    # [batch_size, seq_len, emb_dim]
         img_emb_reduced = tf.reduce_sum(img_emb, axis=2)    # [batch_size, seq_len, emb_dim]
-        print("msg_emb shape reduced seq", msg_emb_reduced.shape)
         # combine inputs to feed into lstm
         combined = tf.concat([img_emb_reduced, msg_emb_reduced], axis=2)    # [batch_size, seq_len, emb_dim*2]
 

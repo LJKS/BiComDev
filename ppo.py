@@ -131,8 +131,8 @@ def rollout_step(agent, critic, features, targets, input_message, prev_state_act
          "prev_state_critic_c": next_state_critic[1],
        }
 
-def do_n_rollout_steps(agent_1, critic_1, features_a1, targets_a1, 
-                        agent_2, critic_2, features_a2, targets_a2,
+def do_n_rollout_steps(agent, critic, features_a1, targets_a1, 
+                        features_a2, targets_a2,
                         reward_function, num_steps):
     """collects num_steps many rollout steps for both agents and merges all into a single dictionary
 
@@ -156,18 +156,18 @@ def do_n_rollout_steps(agent_1, critic_1, features_a1, targets_a1,
     for step in range(num_steps):
         
         if step == 0:
-            input_message_a1 = tf.zeros([batch_size, agent_1.msg_len], dtype=tf.int32)   # To do: adjust to longer message length
-            input_message_a2 = tf.zeros([batch_size, agent_2.msg_len], dtype=tf.int32)   # To do: adjust to longer message length
+            input_message_a1 = tf.zeros([batch_size, agent.msg_len], dtype=tf.int32)   # To do: adjust to longer message length
+            input_message_a2 = tf.zeros([batch_size, agent.msg_len], dtype=tf.int32)   # To do: adjust to longer message length
             
-            prev_state_actor_h_a1 = tf.zeros([batch_size, agent_1.lstm.units])
-            prev_state_actor_c_a1 = tf.zeros([batch_size, agent_1.lstm.units])
-            prev_state_actor_h_a2 = tf.zeros([batch_size, agent_2.lstm.units])
-            prev_state_actor_c_a2 = tf.zeros([batch_size, agent_2.lstm.units])
+            prev_state_actor_h_a1 = tf.zeros([batch_size, agent.lstm.units])
+            prev_state_actor_c_a1 = tf.zeros([batch_size, agent.lstm.units])
+            prev_state_actor_h_a2 = tf.zeros([batch_size, agent.lstm.units])
+            prev_state_actor_c_a2 = tf.zeros([batch_size, agent.lstm.units])
 
-            prev_state_critic_h_a1 = tf.zeros([batch_size, critic_1.lstm.units])
-            prev_state_critic_c_a1 = tf.zeros([batch_size, critic_1.lstm.units])
-            prev_state_critic_h_a2 = tf.zeros([batch_size, critic_2.lstm.units])
-            prev_state_critic_c_a2 = tf.zeros([batch_size, critic_2.lstm.units])
+            prev_state_critic_h_a1 = tf.zeros([batch_size, critic.lstm.units])
+            prev_state_critic_c_a1 = tf.zeros([batch_size, critic.lstm.units])
+            prev_state_critic_h_a2 = tf.zeros([batch_size, critic.lstm.units])
+            prev_state_critic_c_a2 = tf.zeros([batch_size, critic.lstm.units])
         else:
             input_message_a1 = two_agents_rollout["agent_2"]["output_messages"][step-1]
             input_message_a2 = two_agents_rollout["agent_1"]["output_messages"][step-1]
@@ -183,14 +183,14 @@ def do_n_rollout_steps(agent_1, critic_1, features_a1, targets_a1,
             prev_state_critic_c_a2 = two_agents_rollout["agent_2"]["prev_state_critic_c"][step-1]
 
 
-        rollout_step_a1 = rollout_step(agent_1, critic_1, 
+        rollout_step_a1 = rollout_step(agent, critic, 
                                        features_a1, targets_a1, 
                                        input_message_a1,
                                        prev_state_actor_h_a1, prev_state_actor_c_a1,
                                        prev_state_critic_h_a1, prev_state_critic_c_a1,
                                        reward_function)
         
-        rollout_step_a2 = rollout_step(agent_2, critic_2, 
+        rollout_step_a2 = rollout_step(agent, critic, 
                                        features_a2, targets_a2, 
                                        input_message_a2, 
                                        prev_state_actor_h_a2, prev_state_actor_c_a2,
@@ -209,7 +209,7 @@ def do_n_rollout_steps(agent_1, critic_1, features_a1, targets_a1,
     return two_agents_rollout
 
     
-def do_k_rollouts(feature_dataset, agent_1, critic_1, agent_2, critic_2, reward_function, num_steps, num_envs):
+def do_k_rollouts(feature_dataset, agent, critic, reward_function, num_steps, num_envs):
     """A function that carries out k many separate rollouts
     Args:
         feature_dataset(tf.dataset): consisting of ((image_features_agent1, target_vector_agent1),(image_features_agent2, target_vector_agent2)) elements
@@ -223,8 +223,8 @@ def do_k_rollouts(feature_dataset, agent_1, critic_1, agent_2, critic_2, reward_
     """
     k_rollouts = []
     for (features_a1, targets_a1), (features_a2, targets_a2) in feature_dataset.take(num_envs):
-        rollout_steps = do_n_rollout_steps(agent_1, critic_1, features_a1, targets_a1,
-                                                agent_2, critic_2, features_a2, targets_a2,
+        rollout_steps = do_n_rollout_steps(agent, critic, features_a1, targets_a1,
+                                                features_a2, targets_a2,
                                                 reward_function, num_steps)
         k_rollouts.append(rollout_steps)
 
@@ -258,7 +258,7 @@ def merge_rollouts(k_rollouts):
 
     return merged_rollouts
 
-def prepare_ppo_information(merged, critic_1, critic_2):
+def prepare_ppo_information(merged, critic):
     """Calculates and adds addvantage and return information to the merged rollout dictionary
     Args:
         merged (dict): contains the merged rollout information
@@ -275,8 +275,8 @@ def prepare_ppo_information(merged, critic_1, critic_2):
     last_prev_state_critic_a1 = (merged["agent_1"]["prev_state_critic_h"][:, -1], merged["agent_1"]["prev_state_critic_c"][:, -1])
     last_prev_state_critic_a2 = (merged["agent_2"]["prev_state_critic_h"][:, -1], merged["agent_2"]["prev_state_critic_c"][:, -1])
     # creating the bootstrapping values 
-    last_val_a1, _ = critic_1(last_features_a1, last_msg_a1, last_prev_state_critic_a1)
-    last_val_a2, _ = critic_2(last_features_a2, last_msg_a2, last_prev_state_critic_a2)
+    last_val_a1, _ = critic(last_features_a1, last_msg_a1, last_prev_state_critic_a1)
+    last_val_a2, _ = critic(last_features_a2, last_msg_a2, last_prev_state_critic_a2)
 
     all_vals_a1 = tf.concat([merged["agent_1"]["values"], last_val_a1[:, None]], axis=1)
     all_vals_a2 = tf.concat([merged["agent_2"]["values"], last_val_a2[:, None]], axis=1)
@@ -324,10 +324,19 @@ def rollouts_to_dataset(merged, buffer_size, batch_size):
 
     return dataset
 
+
+def combine_dicts(agent_1_dict, agent_2_dict):
+    '''removes agent branching logic to pass all collected data for ppo update'''
+    return {
+        key: tf.concat([agent_1_dict[key], agent_2_dict[key]], axis=0)
+        for key in agent_1_dict.keys()
+    }
+
+
 @tf.function
 def train_step(rollout_data, 
                 agent, critic, optimizer_agent, optimizer_critic, 
-                clip_epsilon=0.2, entropy_coef=0.01, which_agent=""):
+                clip_epsilon=0.2, entropy_coef=0.01):
     """train step for PPO training between two agents in a bidiriectional multistep referential game
      Args:
         rollout_data (tf.dataset): A tf.dataset that contains all PPO information from the rollout relevant for the training step
@@ -336,38 +345,35 @@ def train_step(rollout_data,
         optimizer_agent, optimizer_critic (tf.keras.optimizers): Optimizers that update the parameters of the agent (actor) and critic networks
         clip_epsilon (float): a hyperparameter to constrain the policy update
         entropy_coef (float): hyperparameter to constrain entropy bonus
-        which_agent (str): A string that denotes which agent's rollout is used (to be able to get the message from the other agent)
 
     Return:
         actor_loss_a1, critic_loss_a1, entropy_a1, actor_loss_a2, critic_loss_a2, entropy_a2
     """
 
     with tf.GradientTape(persistent=True) as tape:
-        probs_img, probs_msg, _ = agent(rollout_data[which_agent]["features"], rollout_data[which_agent]["input_messages"],
-                                             (rollout_data[which_agent]["prev_state_actor_h"], rollout_data[which_agent]["prev_state_actor_c"]))
-        vals, _ = critic(rollout_data[which_agent]["features"], rollout_data[which_agent]["input_messages"],
-                                             (rollout_data[which_agent]["prev_state_critic_h"], rollout_data[which_agent]["prev_state_critic_c"]))
+        probs_img, probs_msg, _ = agent(rollout_data["features"], rollout_data["input_messages"],
+                                             (rollout_data["prev_state_actor_h"], rollout_data["prev_state_actor_c"]))
+        vals, _ = critic(rollout_data["features"], rollout_data["input_messages"],
+                                             (rollout_data["prev_state_critic_h"], rollout_data["prev_state_critic_c"]))
                              
 
         img_dist = tfp.distributions.Bernoulli(probs=probs_img)
-        img_logps =img_dist.log_prob(rollout_data[which_agent]["preds"])
+        img_logps =img_dist.log_prob(rollout_data["preds"])
 
         msg_dist = tfp.distributions.Categorical(probs=probs_msg) 
-        msg_logps = msg_dist.log_prob(rollout_data[which_agent]["output_messages"])
+        msg_logps = msg_dist.log_prob(rollout_data["output_messages"])
 
 
         joint_logps = tf.reduce_sum(img_logps, axis=-1)  + tf.reduce_sum(msg_logps, axis=-1)     
-        print("img logps shapes: ",img_logps.shape, tf.reduce_sum(img_logps, axis=-1).shape)
-        print("msg logps shapes: ", msg_logps.shape, tf.reduce_sum(msg_logps, axis=-1).shape)
-        
-        ratios = tf.exp(joint_logps - rollout_data[which_agent]["joint_logps"])
+
+        ratios = tf.exp(joint_logps - rollout_data["joint_logps"])
         entropy = tf.reduce_mean(img_dist.entropy()) + tf.reduce_mean(msg_dist.entropy())
 
-        unclipped = ratios * rollout_data[which_agent]["advantages"]
-        clipped = tf.clip_by_value(ratios, 1 - clip_epsilon, 1 + clip_epsilon) * rollout_data[which_agent]["advantages"]
+        unclipped = ratios * rollout_data["advantages"]
+        clipped = tf.clip_by_value(ratios, 1 - clip_epsilon, 1 + clip_epsilon) * rollout_data["advantages"]
 
         actor_loss = -tf.reduce_mean(tf.minimum(unclipped, clipped)) - entropy_coef * entropy
-        critic_loss = tf.reduce_mean(tf.square(rollout_data[which_agent]["returns"] - vals))
+        critic_loss = tf.reduce_mean(tf.square(rollout_data["returns"] - vals))
 
     # Compute gradients
     agent_grads = tape.gradient(actor_loss, agent.trainable_variables)
@@ -385,38 +391,29 @@ def train_step(rollout_data,
     return actor_loss, critic_loss
 
 
+agent = agents.AgentActor()
+critic = agents.AgentCritic()
 
-agent_1 = agents.AgentActor()
-agent_2 = agents.AgentActor()
-critic_1 = agents.AgentCritic()
-critic_2 = agents.AgentCritic()
-
-actor_lr = 3e-4
-critic_lr = 1e-3
-optimizer_agent_1 = tf.keras.optimizers.Adam(actor_lr) 
-optimizer_agent_2 = tf.keras.optimizers.Adam(actor_lr) 
-optimizer_crit_1 = tf.keras.optimizers.Adam(critic_lr) 
-optimizer_crit_2 = tf.keras.optimizers.Adam(critic_lr) 
+actor_lr = 1e-2
+critic_lr = 1e-2
+optimizer_agent = tf.keras.optimizers.Adam(actor_lr) 
+optimizer_crit = tf.keras.optimizers.Adam(critic_lr) 
 
 dummy_features = tf.zeros([1, 10, 16])  
 dummy_msg = tf.zeros([1, 3], dtype=tf.int32)
 
-dummy_h = tf.zeros([1, agent_1.lstm.units])
-dummy_c = tf.zeros([1, agent_1.lstm.units])
+dummy_h = tf.zeros([1, agent.lstm.units])
+dummy_c = tf.zeros([1, agent.lstm.units])
 
-agent_1(dummy_features, dummy_msg, (dummy_h, dummy_c))
-agent_2(dummy_features, dummy_msg, (dummy_h, dummy_c))
-critic_1(dummy_features, dummy_msg, (dummy_h, dummy_c))
-critic_2(dummy_features, dummy_msg, (dummy_h, dummy_c))
+agent(dummy_features, dummy_msg, (dummy_h, dummy_c))
+critic(dummy_features, dummy_msg, (dummy_h, dummy_c))
 
 # explicitly initializing optimizer slots to avoid singleton variable error (due to train_step call with second model)
-helpers.initialize_optimizer_slots(optimizer_agent_1, agent_1)
-helpers.initialize_optimizer_slots(optimizer_crit_1, critic_1)
-helpers.initialize_optimizer_slots(optimizer_agent_2, agent_2)
-helpers.initialize_optimizer_slots(optimizer_crit_2, critic_2)
+helpers.initialize_optimizer_slots(optimizer_agent, agent)
+helpers.initialize_optimizer_slots(optimizer_crit, critic)
 
-def train(agent_1, agent_2, critic_1, critic_2, 
-          optimizer_agent_1,optimizer_agent_2,optimizer_crit_1,optimizer_crit_2, 
+def train(agent, critic, 
+          optimizer_agent, optimizer_crit, 
           num_same, num_diff1, num_diff2, shuffle_buffer_size, prefetch_buffer_size, batch_size, which_dataset,
           num_steps, num_envs, num_epochs):
     
@@ -424,10 +421,10 @@ def train(agent_1, agent_2, critic_1, critic_2,
     i = 0
 
     # TensorArrays to store losses
-    actor_losses_1 = tf.TensorArray(tf.float32, size=0, dynamic_size=True)
-    critic_losses_1 = tf.TensorArray(tf.float32, size=0, dynamic_size=True)
-    actor_losses_2 = tf.TensorArray(tf.float32, size=0, dynamic_size=True)
-    critic_losses_2 = tf.TensorArray(tf.float32, size=0, dynamic_size=True)
+    actor_losses = tf.TensorArray(tf.float32, size=0, dynamic_size=True)
+    critic_losses = tf.TensorArray(tf.float32, size=0, dynamic_size=True)
+    # actor_losses_2 = tf.TensorArray(tf.float32, size=0, dynamic_size=True)
+    # critic_losses_2 = tf.TensorArray(tf.float32, size=0, dynamic_size=True)
 
     for epoch in tf.range(num_epochs):
         # dataset = generate_ppo_dataset(num_same=num_same, num_diff1=num_diff1, num_diff2=num_diff2, 
@@ -436,13 +433,12 @@ def train(agent_1, agent_2, critic_1, critic_2,
                                         shuffle_buffer_size=shuffle_buffer_size, prefetch_buffer_size=prefetch_buffer_size, batch_size=batch_size, which=which_dataset)
 
         k_rollouts = do_k_rollouts(dataset, 
-                                agent_1, critic_1, 
-                                agent_2, critic_2, 
+                                agent, critic,  
                                 reward_function=helpers.target_match_ratio, 
                                 num_steps=num_steps, num_envs=num_envs)
         merged_rollouts = merge_rollouts(k_rollouts)
                     
-        merged_rollouts = prepare_ppo_information(merged_rollouts, critic_1, critic_2)
+        merged_rollouts = prepare_ppo_information(merged_rollouts, critic)
         
         rollout_dataset = rollouts_to_dataset(merged_rollouts, buffer_size=shuffle_buffer_size, batch_size=batch_size)
 
@@ -450,40 +446,231 @@ def train(agent_1, agent_2, critic_1, critic_2,
             for batch in rollout_dataset:
                 i = i+1
 
-                # Train agent 1
-                actor_loss_1, critic_loss_1 = train_step(batch, agent_1, critic_1,
-                                                        optimizer_agent_1, optimizer_crit_1,
-                                                        clip_epsilon=0.2, entropy_coef=0.01,
-                                                        which_agent="agent_1")
-                # Train agent 2
-                actor_loss_2, critic_loss_2 = train_step(batch, agent_2, critic_2,
-                                                        optimizer_agent_2, optimizer_crit_2,
-                                                        clip_epsilon=0.2, entropy_coef=0.01,
-                                                        which_agent="agent_2")
+                combined_batch = combine_dicts(batch["agent_1"], batch["agent_2"])
+
+                actor_loss, critic_loss = train_step(combined_batch, agent, critic,
+                                                        optimizer_agent, optimizer_crit,
+                                                        clip_epsilon=0.2, entropy_coef=0.01)
+                
                 
                 # Write into TensorArrays
-                actor_losses_1 = actor_losses_1.write(i, actor_loss_1)
-                critic_losses_1 = critic_losses_1.write(i, critic_loss_1)
-                actor_losses_2 = actor_losses_2.write(i, actor_loss_2)
-                critic_losses_2 = critic_losses_2.write(i, critic_loss_2)
+                actor_losses = actor_losses.write(i, actor_loss)
+                critic_losses = critic_losses.write(i, critic_loss)
 
-                print("Actor loss agent 1: ", actor_loss_1)
             
         # Stack TensorArrays to tensors
-        actor_losses_1 = actor_losses_1.stack()
-        critic_losses_1 = critic_losses_1.stack()
-        actor_losses_2 = actor_losses_2.stack()
-        critic_losses_2 = critic_losses_2.stack()
+        actor_losses = actor_losses.stack()
+        critic_losses = critic_losses.stack()
 
-        return actor_losses_1, critic_losses_1, actor_losses_2, critic_losses_2
- 
-actor_losses_1, critic_losses_1, actor_losses_2, critic_losses_2 = train(agent_1, agent_2, critic_1, critic_2, 
-                                                                            optimizer_agent_1,optimizer_agent_2,optimizer_crit_1,optimizer_crit_2, 
+        return actor_losses, critic_losses
+
+
+
+actor_losses, critic_losses = train(agent, critic, 
+                                                                            optimizer_agent, optimizer_crit,
                                                                             num_same=4, num_diff1=6, num_diff2=6, 
                                                                             shuffle_buffer_size=1000, prefetch_buffer_size=1000, batch_size=64, 
                                                                             which_dataset='TRAIN',
                                                                             num_steps=128, num_envs=8, num_epochs=2)
 
-print(actor_losses_1)
+import matplotlib.pyplot as plt
+import numpy as np
+import time
 
 
+def run_test_training(
+        num_train_epochs=5,
+        rollout_steps=64,
+        num_envs=4,
+        feature_dim=16,
+        batch_size=32,
+        num_same=2,
+        num_diff1=4,
+        num_diff2=4,
+        learning_rate=1e-3
+    ):
+    """
+    Runs a small PPO self-play training run and visualizes:
+      - Rewards
+      - Actor/critic losses
+      - Entropy (optional)
+      - Value estimates (optional)
+
+    Uses generate_dummy_ppo_dataset() to keep things simple.
+    """
+
+    print("\n===== STARTING TEST TRAINING =====")
+    print("Feature dim:", feature_dim)
+    print("Batch size:", batch_size)
+    print("Rollout steps:", rollout_steps)
+    print("Environments:", num_envs)
+    print("=================================\n")
+
+    # ------------------------
+    #  1. Create agent + critic
+    # ------------------------
+    agent = agents.AgentActor()
+    critic = agents.AgentCritic()
+
+    # Build them
+    dummy_features = tf.zeros([1, 10, feature_dim])
+    dummy_msg = tf.zeros([1, agent.msg_len], dtype=tf.int32)
+    dummy_h = tf.zeros([1, agent.lstm.units])
+    dummy_c = tf.zeros([1, agent.lstm.units])
+
+    agent(dummy_features, dummy_msg, (dummy_h, dummy_c))
+    critic(dummy_features, dummy_msg, (dummy_h, dummy_c))
+
+    # Optimizers
+    opt_actor = tf.keras.optimizers.Adam(learning_rate)
+    opt_critic = tf.keras.optimizers.Adam(learning_rate)
+
+    helpers.initialize_optimizer_slots(opt_actor, agent)
+    helpers.initialize_optimizer_slots(opt_critic, critic)
+
+    # ------------------------
+    #  2. Logging buffers
+    # ------------------------
+    reward_curve = []
+    actor_losses = []
+    critic_losses = []
+
+    # ------------------------
+    #  3. Training loop
+    # ------------------------
+    for epoch in range(num_train_epochs):
+
+        print(f"\n----- EPOCH {epoch+1}/{num_train_epochs} -----")
+
+        dataset = generate_dummy_ppo_dataset(
+            num_same, num_diff1, num_diff2,
+            shuffle_buffer_size=512,
+            prefetch_buffer_size=512,
+            batch_size=batch_size,
+            which="TRAIN",
+            feature_dim=feature_dim
+        )
+
+        # Rollouts
+        k_rollouts = do_k_rollouts(
+            dataset,
+            agent, critic,
+            reward_function=helpers.target_match_ratio,
+            num_steps=rollout_steps,
+            num_envs=num_envs
+        )
+
+        merged = merge_rollouts(k_rollouts)
+        merged = prepare_ppo_information(merged, critic)
+        rollout_ds = rollouts_to_dataset(merged, buffer_size=512, batch_size=batch_size)
+
+        # ---- PPO updates ----
+        epoch_actor_losses = []
+        epoch_critic_losses = []
+
+        for batch in rollout_ds:
+            combined = combine_dicts(batch["agent_1"], batch["agent_2"])
+
+            a_loss, c_loss = train_step(
+                combined,
+                agent, critic,
+                opt_actor, opt_critic
+            )
+
+            epoch_actor_losses.append(a_loss.numpy())
+            epoch_critic_losses.append(c_loss.numpy())
+
+        actor_losses.append(np.mean(epoch_actor_losses))
+        critic_losses.append(np.mean(epoch_critic_losses))
+
+        # ------------------------
+        #  4. Evaluate policy reward
+        # ------------------------
+        mean_reward = evaluate_policy_reward(
+            agent, critic,
+            rollout_steps=rollout_steps,
+            num_envs=4,
+            feature_dim=feature_dim,
+            num_same=num_same,
+            num_diff1=num_diff1,
+            num_diff2=num_diff2
+        )
+        reward_curve.append(mean_reward)
+
+        print(f"Mean reward this epoch: {mean_reward:.4f}")
+        print(f"Actor loss: {actor_losses[-1]:.4f}")
+        print(f"Critic loss: {critic_losses[-1]:.4f}")
+
+    # ------------------------
+    #  5. VISUALIZATION
+    # ------------------------
+    visualize_training_curves(reward_curve, actor_losses, critic_losses)
+
+    print("\n===== TEST RUN COMPLETE =====\n")
+
+    return reward_curve, actor_losses, critic_losses
+
+
+
+def evaluate_policy_reward(agent, critic,
+                           rollout_steps, num_envs,
+                           feature_dim, num_same, num_diff1, num_diff2):
+
+    dataset = generate_dummy_ppo_dataset(
+        num_same, num_diff1, num_diff2,
+        shuffle_buffer_size=1,
+        prefetch_buffer_size=1,
+        batch_size=1,
+        which="TRAIN",
+        feature_dim=feature_dim
+    )
+
+    rewards = []
+
+    for (features_a1, targets_a1), (features_a2, targets_a2) in dataset.take(num_envs):
+        rollout = do_n_rollout_steps(agent, critic,
+                                      features_a1, targets_a1,
+                                      features_a2, targets_a2,
+                                      helpers.target_match_ratio,
+                                      rollout_steps)
+
+        # We measure accuracy of predictions over time
+        r1 = tf.reduce_mean(rollout["agent_1"]["rewards"])
+        r2 = tf.reduce_mean(rollout["agent_2"]["rewards"])
+        rewards.append(0.5 * (r1 + r2))
+
+    return float(np.mean(rewards))
+
+
+def visualize_training_curves(reward_curve, actor_losses, critic_losses):
+    fig, axs = plt.subplots(3, 1, figsize=(8, 10))
+
+    axs[0].plot(reward_curve, marker='o')
+    axs[0].set_title("Mean Episode Reward")
+    axs[0].set_xlabel("Epoch")
+    axs[0].set_ylabel("Reward")
+
+    axs[1].plot(actor_losses, marker='x')
+    axs[1].set_title("Actor Loss")
+    axs[1].set_xlabel("Epoch")
+    axs[1].set_ylabel("Loss")
+
+    axs[2].plot(critic_losses, marker='x')
+    axs[2].set_title("Critic Loss")
+    axs[2].set_xlabel("Epoch")
+    axs[2].set_ylabel("Loss")
+
+    plt.tight_layout()
+    plt.show()
+
+reward_curve, actor_losses, critic_losses = run_test_training(
+    num_train_epochs=10,
+    rollout_steps=64,
+    num_envs=4,
+    feature_dim=16,
+    batch_size=32,
+    num_same=2,
+    num_diff1=4,
+    num_diff2=4,
+    learning_rate=1e-3
+)
