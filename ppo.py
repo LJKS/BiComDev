@@ -1,28 +1,49 @@
 import tensorflow as tf
 import tensorflow_probability as tfp
 import os 
+import numpy as np
+import argparse
 import agents
 import data 
 import helpers
 
-def generate_dummy_ppo_dataset(
-    num_same,
-    num_diff1,
-    num_diff2,
-    shuffle_buffer_size,
-    prefetch_buffer_size,
-    batch_size,
-    which="TRAIN",
-    feature_dim=16):
+
+def get_args():
+    parser = argparse.ArgumentParser(description="Train PPO on bidirectional multi-step signaling game")
+
+    # environment
+    parser.add_argument("--num_same", type=int, default=2, help="defines the number of images observed by both agents")
+    parser.add_argument("--num_diff1", type=int, default=4, help="defines the number of images observed by agent 1 only")
+    parser.add_argument("--num_diff2", type=int, default=4, help="defines the number of images observed by agent 1 only")
+    parser.add_argument("--feature_dim", type=int, default=16) # default set to usual imagenet feature dimension; only needed for the dummy pass
+    parser.add_argument("--dummy", action="store_true", help="if used, then the agent will be trained on a dummy dataset consisting of onehot vectors")
+
+    # training
+    parser.add_argument("--num_epochs", type=int, default=20, help="number of epochs that the agents train for")
+    parser.add_argument("--updates_per_epoch", type=int, default=4)
+    parser.add_argument("--num_steps", type=int, default=64, help="maximum number of steps per game")
+    parser.add_argument("--num_envs", type=int, default=4, help="number of environments whichs rollouts are collected from in parallel (under the same policy)")
+    parser.add_argument("--batch_size", type=int, default=32)
+    parser.add_argument("--which_dataset", type=str, default="TRAIN", help="details whether the training (TRAIN), testing (TEST), or validation (VAL) data is used")
+
+    # PPO hyperparameters
+    parser.add_argument("--actor_lr", type=float, default=1e-3)
+    parser.add_argument("--critic_lr", type=float, default=1e-3)
+    parser.add_argument("--clip_epsilon", type=float, default=0.2)
+    parser.add_argument("--entropy_coef", type=float, default=0.01)
+
+    return parser.parse_args()
+
+
+def generate_dummy_ppo_dataset(num_same, num_diff1, num_diff2,
+                                shuffle_buffer_size, prefetch_buffer_size, batch_size, which, feature_dim):
     """
     Returns batches of one-hot features shaped like:
         [num_same + num_diff1 + num_diff2, feature_dim]
-
     This output can be passed straight into:
         assign_feats_to_agents()
     with no other changes.
     """
-
     train, val, test = data.load_dummy_feature_datasets(feature_dim)
 
     if which.upper() == "TRAIN":
@@ -41,7 +62,7 @@ def generate_dummy_ppo_dataset(
     return game_input_ds
 
 
-def generate_ppo_dataset(num_same, num_diff1, num_diff2, shuffle_buffer_size, prefetch_buffer_size, batch_size, which='TRAIN'):
+def generate_ppo_dataset(num_same, num_diff1, num_diff2, shuffle_buffer_size, prefetch_buffer_size, batch_size, which):
     """generates a dataset that contains tuples of features, target pair per agent
 
     Args:
@@ -252,9 +273,7 @@ def merge_rollouts(k_rollouts):
             perm = tf.concat([[1, 0], tf.range(2, tf.rank(merged))], axis=0)
             merged = tf.transpose(merged, perm)
             
-
             merged_rollouts[a][key] = merged
-
 
     return merged_rollouts
 
@@ -325,18 +344,40 @@ def rollouts_to_dataset(merged, buffer_size, batch_size):
     return dataset
 
 
-def combine_dicts(agent_1_dict, agent_2_dict):
-    '''removes agent branching logic to pass all collected data for ppo update'''
-    return {
-        key: tf.concat([agent_1_dict[key], agent_2_dict[key]], axis=0)
-        for key in agent_1_dict.keys()
-    }
+def evaluate_policy_reward(agent, critic,
+                           num_steps, num_envs,
+                           feature_dim, num_same, num_diff1, num_diff2):
+    """ Evalutes the policy by calui
+    """
 
+    dataset = generate_dummy_ppo_dataset(
+        num_same, num_diff1, num_diff2,
+        shuffle_buffer_size=1,
+        prefetch_buffer_size=1,
+        batch_size=1,
+        which="TRAIN",
+        feature_dim=feature_dim
+    )
+
+    rewards = []
+
+    for (features_a1, targets_a1), (features_a2, targets_a2) in dataset.take(num_envs):
+        rollout = do_n_rollout_steps(agent, critic,
+                                      features_a1, targets_a1,
+                                      features_a2, targets_a2,
+                                      helpers.target_match_ratio,
+                                      num_steps)
+
+        r1 = tf.reduce_mean(rollout["agent_1"]["rewards"])
+        r2 = tf.reduce_mean(rollout["agent_2"]["rewards"])
+        rewards.append(0.5 * (r1 + r2))
+
+    return float(np.mean(rewards))
 
 @tf.function
 def train_step(rollout_data, 
                 agent, critic, optimizer_agent, optimizer_critic, 
-                clip_epsilon=0.2, entropy_coef=0.01):
+                clip_epsilon, entropy_coef):
     """train step for PPO training between two agents in a bidiriectional multistep referential game
      Args:
         rollout_data (tf.dataset): A tf.dataset that contains all PPO information from the rollout relevant for the training step
@@ -347,7 +388,7 @@ def train_step(rollout_data,
         entropy_coef (float): hyperparameter to constrain entropy bonus
 
     Return:
-        actor_loss_a1, critic_loss_a1, entropy_a1, actor_loss_a2, critic_loss_a2, entropy_a2
+        actor_loss, critic_loss
     """
 
     with tf.GradientTape(persistent=True) as tape:
@@ -391,286 +432,131 @@ def train_step(rollout_data,
     return actor_loss, critic_loss
 
 
-agent = agents.AgentActor()
-critic = agents.AgentCritic()
-
-actor_lr = 1e-2
-critic_lr = 1e-2
-optimizer_agent = tf.keras.optimizers.Adam(actor_lr) 
-optimizer_crit = tf.keras.optimizers.Adam(critic_lr) 
-
-dummy_features = tf.zeros([1, 10, 16])  
-dummy_msg = tf.zeros([1, 3], dtype=tf.int32)
-
-dummy_h = tf.zeros([1, agent.lstm.units])
-dummy_c = tf.zeros([1, agent.lstm.units])
-
-agent(dummy_features, dummy_msg, (dummy_h, dummy_c))
-critic(dummy_features, dummy_msg, (dummy_h, dummy_c))
-
-# explicitly initializing optimizer slots to avoid singleton variable error (due to train_step call with second model)
-helpers.initialize_optimizer_slots(optimizer_agent, agent)
-helpers.initialize_optimizer_slots(optimizer_crit, critic)
-
-def train(agent, critic, 
-          optimizer_agent, optimizer_crit, 
-          num_same, num_diff1, num_diff2, shuffle_buffer_size, prefetch_buffer_size, batch_size, which_dataset,
-          num_steps, num_envs, num_epochs):
-    
-    ppo_updates_per_epoch = 4
-    i = 0
-
-    # TensorArrays to store losses
-    actor_losses = tf.TensorArray(tf.float32, size=0, dynamic_size=True)
-    critic_losses = tf.TensorArray(tf.float32, size=0, dynamic_size=True)
-    # actor_losses_2 = tf.TensorArray(tf.float32, size=0, dynamic_size=True)
-    # critic_losses_2 = tf.TensorArray(tf.float32, size=0, dynamic_size=True)
-
-    for epoch in tf.range(num_epochs):
-        # dataset = generate_ppo_dataset(num_same=num_same, num_diff1=num_diff1, num_diff2=num_diff2, 
-        #                                 shuffle_buffer_size=shuffle_buffer_size, prefetch_buffer_size=prefetch_buffer_size, batch_size=batch_size, which=which_dataset)
-        dataset = generate_dummy_ppo_dataset(num_same=num_same, num_diff1=num_diff1, num_diff2=num_diff2, 
-                                        shuffle_buffer_size=shuffle_buffer_size, prefetch_buffer_size=prefetch_buffer_size, batch_size=batch_size, which=which_dataset)
-
-        k_rollouts = do_k_rollouts(dataset, 
-                                agent, critic,  
-                                reward_function=helpers.target_match_ratio, 
-                                num_steps=num_steps, num_envs=num_envs)
-        merged_rollouts = merge_rollouts(k_rollouts)
-                    
-        merged_rollouts = prepare_ppo_information(merged_rollouts, critic)
-        
-        rollout_dataset = rollouts_to_dataset(merged_rollouts, buffer_size=shuffle_buffer_size, batch_size=batch_size)
-
-        for update in range(ppo_updates_per_epoch):
-            for batch in rollout_dataset:
-                i = i+1
-
-                combined_batch = combine_dicts(batch["agent_1"], batch["agent_2"])
-
-                actor_loss, critic_loss = train_step(combined_batch, agent, critic,
-                                                        optimizer_agent, optimizer_crit,
-                                                        clip_epsilon=0.2, entropy_coef=0.01)
-                
-                
-                # Write into TensorArrays
-                actor_losses = actor_losses.write(i, actor_loss)
-                critic_losses = critic_losses.write(i, critic_loss)
-
-            
-        # Stack TensorArrays to tensors
-        actor_losses = actor_losses.stack()
-        critic_losses = critic_losses.stack()
-
-        return actor_losses, critic_losses
-
-
-
-actor_losses, critic_losses = train(agent, critic, 
-                                                                            optimizer_agent, optimizer_crit,
-                                                                            num_same=4, num_diff1=6, num_diff2=6, 
-                                                                            shuffle_buffer_size=1000, prefetch_buffer_size=1000, batch_size=64, 
-                                                                            which_dataset='TRAIN',
-                                                                            num_steps=128, num_envs=8, num_epochs=2)
-
-import matplotlib.pyplot as plt
-import numpy as np
-import time
-
-
-def run_test_training(
-        num_train_epochs=5,
-        rollout_steps=64,
-        num_envs=4,
-        feature_dim=16,
-        batch_size=32,
-        num_same=2,
-        num_diff1=4,
-        num_diff2=4,
-        learning_rate=1e-3
-    ):
-    """
-    Runs a small PPO self-play training run and visualizes:
-      - Rewards
-      - Actor/critic losses
-      - Entropy (optional)
-      - Value estimates (optional)
-
-    Uses generate_dummy_ppo_dataset() to keep things simple.
-    """
-
-    print("\n===== STARTING TEST TRAINING =====")
-    print("Feature dim:", feature_dim)
-    print("Batch size:", batch_size)
-    print("Rollout steps:", rollout_steps)
-    print("Environments:", num_envs)
-    print("=================================\n")
-
-    # ------------------------
-    #  1. Create agent + critic
-    # ------------------------
+def initialize_agents(actor_lr=1e-3, critic_lr=1e-3, feature_dim=2048):
     agent = agents.AgentActor()
     critic = agents.AgentCritic()
 
-    # Build them
-    dummy_features = tf.zeros([1, 10, feature_dim])
+    optimizer_agent = tf.keras.optimizers.Adam(actor_lr) 
+    optimizer_crit = tf.keras.optimizers.Adam(critic_lr) 
+
+    dummy_features = tf.zeros([1, 10, feature_dim])  
     dummy_msg = tf.zeros([1, agent.msg_len], dtype=tf.int32)
+
     dummy_h = tf.zeros([1, agent.lstm.units])
     dummy_c = tf.zeros([1, agent.lstm.units])
 
     agent(dummy_features, dummy_msg, (dummy_h, dummy_c))
     critic(dummy_features, dummy_msg, (dummy_h, dummy_c))
 
-    # Optimizers
-    opt_actor = tf.keras.optimizers.Adam(learning_rate)
-    opt_critic = tf.keras.optimizers.Adam(learning_rate)
+    # explicitly initializing optimizer slots to avoid singleton variable error (due to train_step call with second model)
+    helpers.initialize_optimizer_slots(optimizer_agent, agent)
+    helpers.initialize_optimizer_slots(optimizer_crit, critic)
 
-    helpers.initialize_optimizer_slots(opt_actor, agent)
-    helpers.initialize_optimizer_slots(opt_critic, critic)
+    return agent, critic, optimizer_agent, optimizer_crit
 
-    # ------------------------
-    #  2. Logging buffers
-    # ------------------------
-    reward_curve = []
-    actor_losses = []
-    critic_losses = []
+# def train(agent, critic, 
+#           optimizer_agent, optimizer_crit, 
+#           num_same, num_diff1, num_diff2, feature_dim,
+#           shuffle_buffer_size, prefetch_buffer_size, batch_size, which_dataset,
+#           num_steps, num_envs, num_epochs, updates_per_epoch):
+def train(args):
 
-    # ------------------------
-    #  3. Training loop
-    # ------------------------
-    for epoch in range(num_train_epochs):
+    shuffle_buffer_size = 512
+    prefetch_buffer_size = 512
 
-        print(f"\n----- EPOCH {epoch+1}/{num_train_epochs} -----")
+    if args.dummy:
+        args.feature_dim = 16
 
-        dataset = generate_dummy_ppo_dataset(
-            num_same, num_diff1, num_diff2,
-            shuffle_buffer_size=512,
-            prefetch_buffer_size=512,
-            batch_size=batch_size,
-            which="TRAIN",
-            feature_dim=feature_dim
-        )
 
-        # Rollouts
-        k_rollouts = do_k_rollouts(
-            dataset,
-            agent, critic,
-            reward_function=helpers.target_match_ratio,
-            num_steps=rollout_steps,
-            num_envs=num_envs
-        )
+    agent, critic, optimizer_agent, optimizer_crit = initialize_agents(actor_lr=args.actor_lr, critic_lr=args.critic_lr, feature_dim=args.feature_dim)
 
-        merged = merge_rollouts(k_rollouts)
-        merged = prepare_ppo_information(merged, critic)
-        rollout_ds = rollouts_to_dataset(merged, buffer_size=512, batch_size=batch_size)
 
-        # ---- PPO updates ----
+    train_rewards = []
+    eval_rewards = []
+    mean_actor_losses_epoch = []
+    mean_critic_losses_epoch = []
+    i = 0
+
+    # TensorArrays to store losses
+    actor_losses = tf.TensorArray(tf.float32, size=0, dynamic_size=True)
+    critic_losses = tf.TensorArray(tf.float32, size=0, dynamic_size=True)
+
+
+    for epoch in tf.range(args.num_epochs):
+        if not args.dummy:
+            dataset = generate_ppo_dataset(num_same=args.num_same, num_diff1=args.num_diff1, num_diff2=args.num_diff2, 
+                                            shuffle_buffer_size=shuffle_buffer_size, prefetch_buffer_size=prefetch_buffer_size, batch_size=args.batch_size, which=args.which_dataset)
+        else:
+            dataset = generate_dummy_ppo_dataset(num_same=args.num_same, num_diff1=args.num_diff1, num_diff2=args.num_diff2, 
+                                            shuffle_buffer_size=shuffle_buffer_size, prefetch_buffer_size=prefetch_buffer_size, 
+                                            batch_size=args.batch_size, which=args.which_dataset, feature_dim=args.feature_dim)
+
+
+        k_rollouts = do_k_rollouts(dataset, 
+                                agent, critic,  
+                                reward_function=helpers.target_match_ratio, 
+                                num_steps=args.num_steps, num_envs=args.num_envs)
+        
+        merged_rollouts = merge_rollouts(k_rollouts)
+        
+        mean_reward = helpers.calcualte_train_reward(merged_rollouts)
+        train_rewards.append(mean_reward)
+
+        merged_rollouts = prepare_ppo_information(merged_rollouts, critic)
+        
+        rollout_dataset = rollouts_to_dataset(merged_rollouts, buffer_size=shuffle_buffer_size, batch_size=args.batch_size)
+
         epoch_actor_losses = []
         epoch_critic_losses = []
+        for update in tf.range(args.updates_per_epoch):
+            for batch in rollout_dataset:
+                i = i+1
 
-        for batch in rollout_ds:
-            combined = combine_dicts(batch["agent_1"], batch["agent_2"])
+                combined_batch = helpers.combine_dicts(batch["agent_1"], batch["agent_2"])
 
-            a_loss, c_loss = train_step(
-                combined,
-                agent, critic,
-                opt_actor, opt_critic
-            )
+                actor_loss, critic_loss = train_step(combined_batch, agent, critic,
+                                                        optimizer_agent, optimizer_crit,
+                                                        clip_epsilon=args.clip_epsilon, entropy_coef=args.entropy_coef)
+                # Write into TensorArrays
+                actor_losses = actor_losses.write(i, actor_loss)
+                critic_losses = critic_losses.write(i, critic_loss)
 
-            epoch_actor_losses.append(a_loss.numpy())
-            epoch_critic_losses.append(c_loss.numpy())
+                epoch_actor_losses.append(actor_loss)
+                epoch_critic_losses.append(critic_loss)
+        mean_actor_loss_epoch = tf.reduce_mean(epoch_actor_losses)
+        mean_critic_loss_epoch = tf.reduce_mean(epoch_critic_losses)
+        
+        mean_actor_losses_epoch.append(mean_actor_loss_epoch)
+        mean_critic_losses_epoch.append(mean_critic_loss_epoch)
 
-        actor_losses.append(np.mean(epoch_actor_losses))
-        critic_losses.append(np.mean(epoch_critic_losses))
+        eval_reward = evaluate_policy_reward(agent, critic,
+                           num_steps=args.num_steps, num_envs=args.num_envs,
+                           feature_dim=args.feature_dim, num_same=args.num_same, num_diff1=args.num_diff1, num_diff2=args.num_diff2)
+        eval_rewards.append(eval_reward)
+        print("eval reward in current epoch: ", eval_reward)
+        
+    # Stack TensorArrays to tensors
+    actor_losses = actor_losses.stack()
+    critic_losses = critic_losses.stack()
 
-        # ------------------------
-        #  4. Evaluate policy reward
-        # ------------------------
-        mean_reward = evaluate_policy_reward(
-            agent, critic,
-            rollout_steps=rollout_steps,
-            num_envs=4,
-            feature_dim=feature_dim,
-            num_same=num_same,
-            num_diff1=num_diff1,
-            num_diff2=num_diff2
-        )
-        reward_curve.append(mean_reward)
-
-        print(f"Mean reward this epoch: {mean_reward:.4f}")
-        print(f"Actor loss: {actor_losses[-1]:.4f}")
-        print(f"Critic loss: {critic_losses[-1]:.4f}")
-
-    # ------------------------
-    #  5. VISUALIZATION
-    # ------------------------
-    visualize_training_curves(reward_curve, actor_losses, critic_losses)
-
-    print("\n===== TEST RUN COMPLETE =====\n")
-
-    return reward_curve, actor_losses, critic_losses
+    return {
+    "raw_actor_losses": actor_losses,
+    "raw_critic_losses": critic_losses,
+    "mean_actor_losses_per_epoch": mean_actor_losses_epoch,
+    "mean_critic_losses_per_epoch": mean_critic_losses_epoch,
+    "train_rewards": train_rewards,
+    "eval_rewards": eval_rewards
+    }
 
 
+# args = get_args()
+# results = train(args)
 
-def evaluate_policy_reward(agent, critic,
-                           rollout_steps, num_envs,
-                           feature_dim, num_same, num_diff1, num_diff2):
+# path = os.path.join(os.getcwd(), f"saved_plots/training_curves.png")
+# helpers.visualize_training_curves(results["train_rewards"], results["eval_rewards"], results["mean_actor_losses_per_epoch"], results["mean_critic_losses_per_epoch"], 
+#                                   save_path=path)
 
-    dataset = generate_dummy_ppo_dataset(
-        num_same, num_diff1, num_diff2,
-        shuffle_buffer_size=1,
-        prefetch_buffer_size=1,
-        batch_size=1,
-        which="TRAIN",
-        feature_dim=feature_dim
-    )
-
-    rewards = []
-
-    for (features_a1, targets_a1), (features_a2, targets_a2) in dataset.take(num_envs):
-        rollout = do_n_rollout_steps(agent, critic,
-                                      features_a1, targets_a1,
-                                      features_a2, targets_a2,
-                                      helpers.target_match_ratio,
-                                      rollout_steps)
-
-        # We measure accuracy of predictions over time
-        r1 = tf.reduce_mean(rollout["agent_1"]["rewards"])
-        r2 = tf.reduce_mean(rollout["agent_2"]["rewards"])
-        rewards.append(0.5 * (r1 + r2))
-
-    return float(np.mean(rewards))
-
-
-def visualize_training_curves(reward_curve, actor_losses, critic_losses):
-    fig, axs = plt.subplots(3, 1, figsize=(8, 10))
-
-    axs[0].plot(reward_curve, marker='o')
-    axs[0].set_title("Mean Episode Reward")
-    axs[0].set_xlabel("Epoch")
-    axs[0].set_ylabel("Reward")
-
-    axs[1].plot(actor_losses, marker='x')
-    axs[1].set_title("Actor Loss")
-    axs[1].set_xlabel("Epoch")
-    axs[1].set_ylabel("Loss")
-
-    axs[2].plot(critic_losses, marker='x')
-    axs[2].set_title("Critic Loss")
-    axs[2].set_xlabel("Epoch")
-    axs[2].set_ylabel("Loss")
-
-    plt.tight_layout()
-    plt.show()
-
-reward_curve, actor_losses, critic_losses = run_test_training(
-    num_train_epochs=10,
-    rollout_steps=64,
-    num_envs=4,
-    feature_dim=16,
-    batch_size=32,
-    num_same=2,
-    num_diff1=4,
-    num_diff2=4,
-    learning_rate=1e-3
-)
+if __name__ == "__main__":
+    args = get_args()
+    training_results = train(args)
+    

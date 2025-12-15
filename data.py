@@ -133,11 +133,7 @@ def create_game_instances_dataset(dataset, num_same, num_diff1, num_diff2):
 """
     num_img = num_same + num_diff1 + num_diff2
 
-    
-
     dataset = dataset.batch(num_img, drop_remainder=True)
-
-
     dataset = dataset.map(lambda game_imgs: assign_feats_to_agents(game_imgs, num_same=num_same, num_diff1=num_diff1, num_diff2=num_diff2))
     
     # assigning (&masking) the images to each agent according to the (currently hardcoded) split
@@ -151,18 +147,15 @@ def create_game_instances_dataset(dataset, num_same, num_diff1, num_diff2):
 def create_dummy_feature_dataset_onehot(num_samples=10000, feature_dim=2048):
     """
     Produces one-hot feature vectors of shape [feature_dim].
-    Deterministic, repeatable, lightweight.
     """
     ids = tf.range(num_samples) % feature_dim
     features = tf.one_hot(ids, depth=feature_dim, dtype=tf.float32)
     return tf.data.Dataset.from_tensor_slices(features)
 
-def load_dummy_feature_datasets(
-    feature_dim=2048,
-    num_samples_train=8000,
-    num_samples_val=2000,
-    num_samples_test=2000
-):
+def load_dummy_feature_datasets(feature_dim, num_samples_train=8000,num_samples_val=2000,num_samples_test=2000):
+    """creates dummy dataset that contains one-hot vectors of shape [batch_size, feature_dim]
+    Args: 
+    """
     train = create_dummy_feature_dataset_onehot(num_samples_train, feature_dim)
     val   = create_dummy_feature_dataset_onehot(num_samples_val,   feature_dim)
     test  = create_dummy_feature_dataset_onehot(num_samples_test,  feature_dim)
