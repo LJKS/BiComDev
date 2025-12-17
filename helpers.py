@@ -2,6 +2,9 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 import os
 import numpy as np
+from datetime import datetime
+import json
+
 
 def compute_gae(rewards, values, gamma=0.99, lam=0.95):
     """computes the generalized advantage estimation based on critics value estimate and rewards
@@ -106,5 +109,33 @@ def visualize_training_curves(training_rewards, eval_rewards, actor_losses, crit
         os.makedirs(os.path.dirname(save_path), exist_ok=True)  # create folder if it doesn't exist
         plt.savefig(save_path)
         print(f"Plot saved to {save_path}")
-    plt.show()
+    # plt.show()
+
+
+
+def setup_run_dir(args):
+
+    run_id = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    run_dir = os.path.join("runs", run_id)
+
+    os.makedirs(run_dir, exist_ok=False)
+    os.makedirs(os.path.join(run_dir, "checkpoints"))
+    os.makedirs(os.path.join(run_dir, "plots"))
+
+    # Save config
+    with open(os.path.join(run_dir, "config.json"), "w") as f:
+        json.dump(vars(args), f, indent=2)
+
+    return run_dir
+
+def save_checkpoints(run_dir, current_epoch, agent, critic, num_epochs, save_every):
+    
+    if current_epoch % save_every != 0 and current_epoch != (num_epochs-1):
+            return  # skip saving
+
+    ckpt_dir = os.path.join(run_dir, "checkpoints", f"epoch_{current_epoch:04d}")
+    os.makedirs(ckpt_dir, exist_ok=True)
+    
+    agent.save_weights(os.path.join(ckpt_dir, "actor.weights.h5"))
+    critic.save_weights(os.path.join(ckpt_dir, "critic.weights.h5"))
 

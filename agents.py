@@ -84,10 +84,9 @@ class AgentActor(tf.keras.Model):
 
 
 class AgentCritic(tf.keras.Model):
-    def __init__(self, embed_dim=50, vocab_size=10, lstm_units=128, msg_len=3):
+    def __init__(self, embed_dim=50, vocab_size=10, lstm_units=128):
         super().__init__()
 
-        self.msg_len = msg_len
         self.vocab_size = vocab_size
         self.img_embed = tf.keras.layers.Dense(embed_dim, activation='sigmoid')
         self.msg_embed = tf.keras.layers.Embedding(vocab_size, embed_dim)
