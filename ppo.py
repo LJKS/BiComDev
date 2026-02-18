@@ -3,10 +3,11 @@ import tensorflow_probability as tfp
 import os 
 import numpy as np
 import argparse
-import csv
+import json
 import agents
 import data 
 import helpers
+import pandas as pd
 
 
 def get_args():
@@ -14,24 +15,26 @@ def get_args():
 
     # environment
     parser.add_argument("--num_same", type=int, default=2, help="defines the number of images observed by both agents")
-    parser.add_argument("--num_diff1", type=int, default=4, help="defines the number of images observed by agent 1 only")
-    parser.add_argument("--num_diff2", type=int, default=4, help="defines the number of images observed by agent 1 only")
+    parser.add_argument("--num_diff1", type=int, default=2, help="defines the number of images observed by agent 1 only")
+    parser.add_argument("--num_diff2", type=int, default=2, help="defines the number of images observed by agent 1 only")
     parser.add_argument("--feature_dim", type=int, default=2048, help="Feature dimension of the input data. Default set to usual imagenet feature dimension; only needs to be adjusted for the dummy data")
     parser.add_argument("--dummy", action="store_true", help="if used, then the agent will be trained on a dummy dataset consisting of onehot vectors")
+    parser.add_argument("--trivial", action="store_true", help="Use a single fixed trivial game instance")
 
     # training
-    parser.add_argument("--num_epochs", type=int, default=20, help="number of epochs that the agents train for")
-    parser.add_argument("--updates_per_epoch", type=int, default=4)
-    parser.add_argument("--num_steps", type=int, default=10, help="maximum number of steps per game")
-    parser.add_argument("--num_envs", type=int, default=4, help="number of environments whichs rollouts are collected from in parallel (under the same policy)")
+    parser.add_argument("--num_epochs", type=int, default=500, help="number of epochs that the agents train for")
+    parser.add_argument("--updates_per_epoch", type=int, default=2)
+    parser.add_argument("--num_steps", type=int, default=20, help="maximum number of steps per game")
+    parser.add_argument("--num_envs", type=int, default=8, help="number of environments whichs rollouts are collected from in parallel (under the same policy)")
     parser.add_argument("--batch_size", type=int, default=32)
     parser.add_argument("--which_dataset", type=str, default="TRAIN", help="details whether the training (TRAIN), testing (TEST), or validation (VAL) data is used")
 
     # PPO hyperparameters
-    parser.add_argument("--actor_lr", type=float, default=1e-3)
+    parser.add_argument("--actor_lr", type=float, default=1e-4) 
     parser.add_argument("--critic_lr", type=float, default=1e-3)
     parser.add_argument("--clip_epsilon", type=float, default=0.2)
-    parser.add_argument("--entropy_coef", type=float, default=0.01)
+    parser.add_argument("--entropy_coef_img", type=float, default=0.0001)
+    parser.add_argument("--entropy_coef_msg", type=float, default=0.001)
 
     # Network parameters
     parser.add_argument("--vocab_size", type=int, default=10, help="Size of the discrete communication vocabulary")
@@ -42,6 +45,29 @@ def get_args():
     parser.add_argument("--save", action="store_false", help="create run folder and save results and plots in it")
     return parser.parse_args()
 
+
+
+
+def load_config(config_path):
+    """Load a saved config.json and return an argparse.Namespace compatible with your training code.
+    Args:
+        config_path(str): path to directory where the configuration file (copnfig.json) is saved
+    Return:
+        argparse.Namespace with the values from config.json loaded into
+    """
+    # Start from default args (ensures new args get defaults)
+    args = get_args()
+
+    with open(config_path, "r") as f:
+        saved = json.load(f)
+
+    for k, v in saved.items():
+        if hasattr(args, k):
+            setattr(args, k, v)
+        else:
+            print(f"[load_config] Warning: unknown arg '{k}' in config")
+
+    return args
 
 
 def initialize_agents(actor_lr, critic_lr, feature_dim, vocab_size, msg_len):
@@ -115,6 +141,45 @@ def generate_dummy_ppo_dataset(num_same, num_diff1, num_diff2,
     return game_input_ds
 
 
+def generate_trivial_ppo_dataset(feature_dim=16,batch_size=1):
+    """
+    Returns a dataset with exactly one fixed game instance,
+    repeated indefinitely. It's hard-coded for debugging.
+    """
+
+    # Shared target referents (same for both agents) 
+    shared = tf.one_hot(3, feature_dim)
+
+    # distractors referents (not shared, unique to each agent) 
+    distractor_a1 = tf.one_hot(15, feature_dim)
+    distractor_a2 = tf.one_hot(5, feature_dim)
+
+    # combined referents, observable env per agent
+    features_a1 = tf.stack([shared, distractor_a1], axis=0)
+    features_a2 = tf.stack([shared,distractor_a2], axis=0)
+
+    # target vector showing which image is a target
+    targets_a1 = tf.constant([1.0, 0.0])
+    targets_a2 = tf.constant([1.0, 0.0])
+
+    #add batch dimension
+    features_a1 = features_a1[None, ...]   # [1, 2, feature_dim]
+    features_a2 = features_a2[None, ...]
+    targets_a1 = targets_a1[None, ...]     # [1, 2]
+    targets_a2 = targets_a2[None, ...]
+
+    # turn into tf.dataset
+    dataset = tf.data.Dataset.from_tensors(
+        ((features_a1, targets_a1),
+         (features_a2, targets_a2))
+    )
+
+    # repeat forever so PPO never exhausts it
+    dataset = dataset.repeat()
+
+    return dataset
+
+
 def generate_ppo_dataset(num_same, num_diff1, num_diff2, shuffle_buffer_size, prefetch_buffer_size, batch_size, which):
     """generates a dataset that contains tuples of features, target pair per agent
 
@@ -161,7 +226,10 @@ def rollout_step(agent, critic, features, targets, input_message,
         features (tensor): A set of features describing images seen by the agent; shape [batch_size, num_imgs, feature_dim]
         targets (tensor): A binary tensor that details whether a feature tensor is a target (=1) or not (=0); shape [batch_size, num_img]
         input_message (tensor): A tensor of discrete symbols that was sent by the other agent (or an initial message); shape [batch_size, message_length]
-        num_steps (int): The number of steps the agents takes before the game is terminated
+        prev_state_actor_h (tensor): previous lstm hidden state from the actor network
+        prev_state_actor_c (tensor): previous lstm cell state from the actor network
+        prev_state_critic_h (tensor):previous lstm hidden state from the critic network
+        prev_state_critic_c (tensor): previous lstm cell state from the critic network
         reward_function (function): some reward function based on correct target prediction 
             - takes predictions and targets as inputs
 
@@ -182,6 +250,8 @@ def rollout_step(agent, critic, features, targets, input_message,
             - prev_state_critic_c: cell state of the agent's LSTM after this step (used as previous state for the input in the next step)
 
     """
+
+
     probs_img, probs_msg, next_state_actor = agent(features, input_message, (prev_state_actor_h, prev_state_actor_c))
     vals, next_state_critic = critic(features, input_message, (prev_state_critic_h, prev_state_critic_c))
 
@@ -200,8 +270,8 @@ def rollout_step(agent, critic, features, targets, input_message,
     
     return {
          "features": features,                  # [batch_size, num_imgs, feature_dim]
-         "input_messages": input_message,       # [batch_size,] --> for now, only one symbol is returned as message, can adjust later
-         "output_messages": output_messages,    # [batch_size,] --> for now, only one symbol is returned as message, can adjust later
+         "input_messages": input_message,       # [batch_size, msg_len] 
+         "output_messages": output_messages,    # [batch_size, msg_len] 
          "targets": targets,
          "preds": preds,                        # [batch_size, num_imgs]
          "img_logps": img_logps,                # [batch_size,]
@@ -215,16 +285,19 @@ def rollout_step(agent, critic, features, targets, input_message,
          "prev_state_critic_c": next_state_critic[1],   # [batch_size, lstm_units]
        }
 
+
 def do_n_rollout_steps(agent, critic, features_a1, targets_a1, 
                         features_a2, targets_a2,
                         reward_function, num_steps):
     """collects num_steps many rollout steps for both agents and merges all into a single dictionary
 
     Args:
-        agent_1, agent_2 (tf.keras.Model): Reinforcement learning agents from agents.py
-        critic_1, critic_2 (tf.keras.Model): Reinforcement learning critics from agents.py
+        agent (tf.keras.Model): Reinforcement learning actor network from agents.py
+        critic (tf.keras.Model): Reinforcement learning critic network from agents.py
         features_a1, features_a2 (tensor): Sets of features describing images seen by the agents respectively [batch_size, num_img, feature_dim]
         targets_a1, targets_a2 (tensor): Binary tensors that details whether a feature tensor is a target (=1) or not (=0), for each agent respectively; shape [batch_size, num_img]
+        reward_function (function): some reward function based on correct target prediction 
+            - takes predictions and targets as inputs
         num_steps (int): The number of steps until the rollout collection is terminated
         
     Return:
@@ -233,15 +306,15 @@ def do_n_rollout_steps(agent, critic, features_a1, targets_a1,
     batch_size = tf.shape(features_a1)[0]
 
     two_agents_rollout = {
-        "agent_1": {key: [] for key in ["features", "input_messages", "output_messages", "targets", "preds", "img_logps", "msg_logps", "joint_logps", "rewards", "values", "prev_state_actor_h", "prev_state_actor_c", "prev_state_critic_h", "prev_state_critic_c"]},
-        "agent_2": {key: [] for key in ["features", "input_messages", "output_messages", "targets", "preds", "img_logps", "msg_logps", "joint_logps", "rewards", "values", "prev_state_actor_h", "prev_state_actor_c", "prev_state_critic_h", "prev_state_critic_c"]},
+        "agent_1": {key: [] for key in ["features", "input_messages", "output_messages", "targets", "preds", "img_logps", "msg_logps", "joint_logps", "rewards", "joint_rewards", "values", "prev_state_actor_h", "prev_state_actor_c", "prev_state_critic_h", "prev_state_critic_c"]},
+        "agent_2": {key: [] for key in ["features", "input_messages", "output_messages", "targets", "preds", "img_logps", "msg_logps", "joint_logps", "rewards", "joint_rewards", "values", "prev_state_actor_h", "prev_state_actor_c", "prev_state_critic_h", "prev_state_critic_c"]},
     }
 
     for step in range(num_steps):
         
         if step == 0:
-            input_message_a1 = tf.zeros([batch_size, agent.msg_len], dtype=tf.int32)   # To do: adjust to longer message length
-            input_message_a2 = tf.zeros([batch_size, agent.msg_len], dtype=tf.int32)   # To do: adjust to longer message length
+            input_message_a1 = tf.zeros([batch_size, agent.msg_len], dtype=tf.int32)   
+            input_message_a2 = tf.zeros([batch_size, agent.msg_len], dtype=tf.int32)   
             
             prev_state_actor_h_a1 = tf.zeros([batch_size, agent.lstm.units])
             prev_state_actor_c_a1 = tf.zeros([batch_size, agent.lstm.units])
@@ -267,6 +340,7 @@ def do_n_rollout_steps(agent, critic, features_a1, targets_a1,
             prev_state_critic_c_a2 = two_agents_rollout["agent_2"]["prev_state_critic_c"][step-1]
 
 
+        # rollout step for each agent
         rollout_step_a1 = rollout_step(agent, critic, 
                                        features_a1, targets_a1, 
                                        input_message_a1,
@@ -281,14 +355,20 @@ def do_n_rollout_steps(agent, critic, features_a1, targets_a1,
                                        prev_state_critic_h_a2, prev_state_critic_c_a2,
                                        reward_function)
 
+        # writing the rollout step data into dict
         for k, v in rollout_step_a1.items():
             two_agents_rollout["agent_1"][k].append(v)
         for k, v in rollout_step_a2.items():
             two_agents_rollout["agent_2"][k].append(v)
         
+    # concatenating both rollouts into one 
     for agent in ["agent_1", "agent_2"]:
         for k in two_agents_rollout[agent]:
             two_agents_rollout[agent][k] = tf.stack(two_agents_rollout[agent][k], axis=0)
+
+    # getting joint rewards for each rollout step and assigning it to each agent
+    two_agents_rollout["agent_1"]["joint_rewards"] = (two_agents_rollout["agent_1"]["rewards"] + two_agents_rollout["agent_2"]["rewards"])/2 
+    two_agents_rollout["agent_2"]["joint_rewards"] = (two_agents_rollout["agent_1"]["rewards"] + two_agents_rollout["agent_2"]["rewards"])/2
 
     return two_agents_rollout
 
@@ -296,11 +376,13 @@ def do_n_rollout_steps(agent, critic, features_a1, targets_a1,
 def do_k_rollouts(feature_dataset, agent, critic, reward_function, num_steps, num_envs):
     """A function that carries out k many separate rollouts
     Args:
-        feature_dataset(tf.dataset): consisting of ((image_features_agent1, target_vector_agent1),(image_features_agent2, target_vector_agent2)) elements
-        agent_1, agent_2 (tf.keras.Model): Reinforcement learning agents from agents.py
-        critic_1, critic_2 (tf.keras.Model): Reinforcement learning critics from agents.py
+        feature_dataset (tf.dataset): consisting of ((image_features_agent1, target_vector_agent1),(image_features_agent2, target_vector_agent2)) elements
+        agent (tf.keras.Model): Reinforcement learning actor network from agents.py
+        critic (tf.keras.Model): Reinforcement learning critic network from agents.py
+        reward_function (function): some reward function based on correct target prediction 
+            - takes predictions and targets as inputs
         num_steps (int): The number of steps until the rollout collection is terminated
-        k (int): number of environments (games) from which rollouts are collected
+        num_envs (int): number of environments (games) from which rollouts are collected in parallel
     
     Return:
         A list of k rollouts with each element being a dict that contains all rollout information for both agents over num_step timesteps
@@ -332,7 +414,17 @@ def merge_rollouts(k_rollouts):
 
     for a in ["agent_1", "agent_2"]:
         for key in k_rollouts[0]["agent_1"].keys():
-            merged = tf.concat([r[a][key] for r in k_rollouts], axis=1)
+
+            tensors = []
+            for r in k_rollouts:
+                t = r[a][key]
+                if tf.rank(t) == 1:
+                    t = t[:, None]  # [num_steps] -> [num_steps, 1]
+                tensors.append(t)
+
+            merged = tf.concat(tensors, axis=1)
+            tf.debugging.assert_rank_at_least(merged, 2)
+
             # transposing in such a way that batch_size is first and num_steps second
             perm = tf.concat([[1, 0], tf.range(2, tf.rank(merged))], axis=0)
             merged = tf.transpose(merged, perm)
@@ -345,7 +437,7 @@ def prepare_ppo_information(merged, critic):
     """Calculates and adds addvantage and return information to the merged rollout dictionary
     Args:
         merged (dict): contains the merged rollout information
-        critic_1, critc_2 (tf.keras.Model): Reinforcement learning critics from agents.py; here for advantages bootstrapping
+        critic (tf.keras.Model): Reinforcement learning critic network from agents.py; here for advantages bootstrapping
         
     Return:
         The dict with the rollout information has been expanded by returns and advantages
@@ -364,14 +456,13 @@ def prepare_ppo_information(merged, critic):
     all_vals_a1 = tf.concat([merged["agent_1"]["values"], last_val_a1[:, None]], axis=1)
     all_vals_a2 = tf.concat([merged["agent_2"]["values"], last_val_a2[:, None]], axis=1)
     
-    returns_a1 , advantages_a1 = helpers.compute_gae(merged["agent_1"]["rewards"],all_vals_a1)
-    returns_a2 , advantages_a2 = helpers.compute_gae(merged["agent_2"]["rewards"], all_vals_a2)
+    returns_a1 , advantages_a1 = helpers.compute_gae(merged["agent_1"]["joint_rewards"],all_vals_a1)
+    returns_a2 , advantages_a2 = helpers.compute_gae(merged["agent_2"]["joint_rewards"], all_vals_a2)
     
     merged["agent_1"]["returns"] = returns_a1           # shape [batch_size,]
     merged["agent_1"]["advantages"] = advantages_a1     # shape [batch_size,]
     merged["agent_2"]["returns"] = returns_a2           # shape [batch_size,]
     merged["agent_2"]["advantages"] = advantages_a2     # shape [batch_size,]
-
 
     return merged
 
@@ -411,20 +502,21 @@ def rollouts_to_dataset(merged, buffer_size, batch_size):
 def evaluate_policy_reward(agent, critic,
                            num_steps, num_envs,
                            feature_dim, num_same, num_diff1, num_diff2,
-                           which, dummy):
+                           which, dummy, trivial):
     """ Evalutes the policy by calculating the average rewards of a small sample of rollouts
     Args:
-        agent (tf.keras.Model): A reinforcement learning agent from agents.py
-        critic (tf.keras.Model): A reinforcement learning critic from agents.py
+        agent (tf.keras.Model): A reinforcement learning actor network from agents.py
+        critic (tf.keras.Model): A reinforcement learning critic network from agents.py
         num_steps (int): Number of steps per game instance 
-        num_envs (int): Number of environments collected from 
+        num_envs (int): Number of environments collected from in paralell
         feature_dim (int): Length of feature vectors
         num_same (int): Number of objects that are shared between agents
         num_diff1 (int): Number of objects that are only perceived by agent 1
         num_diff2 (int): Number of objects that are only perceived by agent 2
         which (str): String that details whether the train, test, or validation portion of the input dataset is used
         dummy (bool): Flag whether the dataset used is the dummy data or the preprocessed dataset containing image features from mscoco (processed through imagenet)
-    
+        trivial (bool): Flag for trivial dataset that contains the same feature vectors and target across the whole training (for debugging only)
+
     Returns: Average reward across all rollouts as a float.
     """
 
@@ -437,6 +529,8 @@ def evaluate_policy_reward(agent, critic,
             which=which,
             feature_dim=feature_dim
         )
+    elif trivial:
+        dataset = generate_trivial_ppo_dataset(feature_dim=16, batch_size=1)
     else: 
         dataset = generate_ppo_dataset(
             num_same, num_diff1, num_diff2,
@@ -455,9 +549,9 @@ def evaluate_policy_reward(agent, critic,
                                       helpers.target_match_ratio,
                                       num_steps)
 
-        # nochmal anschauen was genau drin steht
-        r1 = tf.reduce_mean(rollout["agent_1"]["rewards"])
-        r2 = tf.reduce_mean(rollout["agent_2"]["rewards"])
+
+        r1 = tf.reduce_mean(rollout["agent_1"]["joint_rewards"])
+        r2 = tf.reduce_mean(rollout["agent_2"]["joint_rewards"])
         rewards.append(0.5 * (r1 + r2)) 
 
     return float(np.mean(rewards))
@@ -465,15 +559,17 @@ def evaluate_policy_reward(agent, critic,
 @tf.function
 def train_step(rollout_data, 
                 agent, critic, optimizer_agent, optimizer_critic, 
-                clip_epsilon, entropy_coef):
+                clip_epsilon, entropy_coef_img, entropy_coef_msg, vocab_size):
     """train step for PPO training between two agents in a bidiriectional multistep referential game
      Args:
         rollout_data (tf.dataset): A tf.dataset that contains all PPO information from the rollout relevant for the training step
-        agent (tf.keras.Model):  A reinforcement learning agent from agents.py
-        critic (tf.keras.Model): A reinforcement learning critic from agents.py
+        agent (tf.keras.Model):  A reinforcement learning actor network from agents.py
+        critic (tf.keras.Model): A reinforcement learning critic network from agents.py
         optimizer_agent, optimizer_critic (tf.keras.optimizers): Optimizers that update the parameters of the agent (actor) and critic networks
         clip_epsilon (float): a hyperparameter to constrain the policy update
-        entropy_coef (float): hyperparameter to constrain entropy bonus
+        entropy_coef_img (float): hyperparameter to constrain entropy bonus for the image entropy
+        entropy_coef_msg (float): hyperparameter to constrain entropy bonus on for the msg entropy
+        vocab_size (int):  Size of the discrete communication vocabulary
 
     Return:
         actor_loss, critic_loss
@@ -496,12 +592,22 @@ def train_step(rollout_data,
         joint_logps = tf.reduce_sum(img_logps, axis=-1)  + tf.reduce_sum(msg_logps, axis=-1)     
 
         ratios = tf.exp(joint_logps - rollout_data["joint_logps"])
-        entropy = tf.reduce_mean(img_dist.entropy()) + tf.reduce_mean(msg_dist.entropy())
 
-        unclipped = ratios * rollout_data["advantages"]
-        clipped = tf.clip_by_value(ratios, 1 - clip_epsilon, 1 + clip_epsilon) * rollout_data["advantages"]
+        # normalizing advantages
+        advantages = rollout_data["advantages"]
+        advantages = (advantages - tf.reduce_mean(advantages)) / (tf.math.reduce_std(advantages) + 1e-8)
 
-        actor_loss = -tf.reduce_mean(tf.minimum(unclipped, clipped)) - entropy_coef * entropy
+        unclipped = ratios * advantages
+        clipped = tf.clip_by_value(ratios, 1 - clip_epsilon, 1 + clip_epsilon) * advantages
+
+        # get entropy 
+        img_entropy = tf.reduce_mean(img_dist.entropy())
+        msg_entropy =  tf.reduce_mean(msg_dist.entropy())
+        # normalize entropy 
+        img_entropy = img_entropy / tf.math.log(2.0)
+        msg_entropy = msg_entropy / tf.math.log(tf.cast(vocab_size, tf.float32))
+
+        actor_loss = -tf.reduce_mean(tf.minimum(unclipped, clipped)) - (entropy_coef_img * img_entropy) - (entropy_coef_msg * msg_entropy)
         critic_loss = tf.reduce_mean(tf.square(rollout_data["returns"] - vals))
 
     # Compute gradients
@@ -511,10 +617,6 @@ def train_step(rollout_data,
     optimizer_agent.apply_gradients(zip(agent_grads, agent.trainable_variables))
     optimizer_critic.apply_gradients(zip(critic_grads, critic.trainable_variables))
 
-    
-    agent_grads = tape.gradient(actor_loss, agent.trainable_variables)
-    critic_grads = tape.gradient(critic_loss, critic.trainable_variables)
-    
     del tape
 
     return actor_loss, critic_loss
@@ -542,34 +644,71 @@ def train(args, run_dir):
     if args.dummy:
         args.feature_dim = 16
 
+    if args.trivial:
+        args.feature_dim = 16
+
+
 
     agent, critic, optimizer_agent, optimizer_crit = initialize_agents(actor_lr=args.actor_lr, critic_lr=args.critic_lr, 
                                                                        feature_dim=args.feature_dim, 
                                                                        vocab_size=args.vocab_size, msg_len=args.msg_len)
-
+    
 
     train_rewards = []
     train_accuracies = []
-    eval_rewards = []
+    exact_match_accuracies = []
+
+    # eval_rewards = []
     mean_actor_losses_epoch = []
     mean_critic_losses_epoch = []
     raw_rewards = []
     all_preds = []
-    i = 0
+    all_targets = []
+    all_messages = []
 
+    buffer_rewards = []
+    buffer_actor_losses = []
+    buffer_critic_losses = []
+    buffer_messages = []
+    buffer_preds = []
+    buffer_targets = []
+
+    i = 0
     # TensorArrays to store losses
     actor_losses = tf.TensorArray(tf.float32, size=0, dynamic_size=True)
     critic_losses = tf.TensorArray(tf.float32, size=0, dynamic_size=True)
 
 
     for epoch in tf.range(args.num_epochs):
-        if not args.dummy:
-            dataset = generate_ppo_dataset(num_same=args.num_same, num_diff1=args.num_diff1, num_diff2=args.num_diff2, 
-                                            shuffle_buffer_size=shuffle_buffer_size, prefetch_buffer_size=prefetch_buffer_size, batch_size=args.batch_size, which=args.which_dataset)
-        else:
+
+        # entropy bonus anneals down; might need to be adjusted depending on final experiments
+        ent_msg = helpers.linear_anneal(
+            epoch,
+            start_epoch=0.2 * args.num_epochs,   
+            end_epoch=0.8 * args.num_epochs,     
+            start_val=1e-3,
+            end_val=1e-4,
+        )
+        ent_img = helpers.linear_anneal(
+            epoch,
+            start_epoch=0.2 * args.num_epochs,
+            end_epoch=0.8 * args.num_epochs,
+            start_val=1e-4,
+            end_val=0.0,
+        )
+
+        # initialize dataset
+        if args.dummy:
             dataset = generate_dummy_ppo_dataset(num_same=args.num_same, num_diff1=args.num_diff1, num_diff2=args.num_diff2, 
+                                shuffle_buffer_size=shuffle_buffer_size, prefetch_buffer_size=prefetch_buffer_size, 
+                                batch_size=args.batch_size, which=args.which_dataset, feature_dim=args.feature_dim)
+        elif args.trivial:
+            dataset = generate_trivial_ppo_dataset(feature_dim = 16, batch_size=1)
+
+        else:
+            dataset = generate_ppo_dataset(num_same=args.num_same, num_diff1=args.num_diff1, num_diff2=args.num_diff2, 
                                             shuffle_buffer_size=shuffle_buffer_size, prefetch_buffer_size=prefetch_buffer_size, 
-                                            batch_size=args.batch_size, which=args.which_dataset, feature_dim=args.feature_dim)
+                                            batch_size=args.batch_size, which=args.which_dataset)
 
 
         k_rollouts = do_k_rollouts(dataset, 
@@ -580,23 +719,35 @@ def train(args, run_dir):
         merged_rollouts = merge_rollouts(k_rollouts)
         
         # logging of rollout data
-        mean_reward = helpers.calcualte_train_reward(merged_rollouts)
+        mean_reward = helpers.calculate_train_reward(merged_rollouts)
         train_rewards.append(mean_reward)
 
-        train_accuracy = helpers.calculate_train_accuracy(merged_rollouts)
+        train_accuracy = helpers.calculate_mean_label_accuracy(merged_rollouts)
         train_accuracies.append(train_accuracy)
+
+        exact_match_accuracy = helpers.calculate_exact_match_accuracy(merged_rollouts)
+        exact_match_accuracies.append(exact_match_accuracy)
 
         combined = helpers.combine_dicts(merged_rollouts["agent_1"], merged_rollouts["agent_2"])
 
-        raw_rewards.append(combined["rewards"])
+        raw_rewards.append(combined["joint_rewards"])
         all_preds.append(combined["preds"])
+        all_targets.append(combined["targets"])
+        all_messages.append(combined["input_messages"])
 
+        buffer_rewards.append(combined["joint_rewards"])
+        buffer_messages.append(combined["input_messages"])
+        buffer_preds.append(combined["preds"])
+        buffer_targets.append(combined["targets"])
+
+        # adding advantages and returns to rollout dict
         merged_rollouts = prepare_ppo_information(merged_rollouts, critic)
         
         rollout_dataset = rollouts_to_dataset(merged_rollouts, buffer_size=shuffle_buffer_size, batch_size=args.batch_size)
 
         epoch_actor_losses = []
         epoch_critic_losses = []
+
         for update in tf.range(args.updates_per_epoch):
             for batch in rollout_dataset:
                 i = i+1
@@ -605,27 +756,51 @@ def train(args, run_dir):
 
                 actor_loss, critic_loss = train_step(combined_batch, agent, critic,
                                                         optimizer_agent, optimizer_crit,
-                                                        clip_epsilon=args.clip_epsilon, entropy_coef=args.entropy_coef)
+                                                        clip_epsilon=args.clip_epsilon, 
+                                                        entropy_coef_img=ent_img, entropy_coef_msg=ent_msg,
+                                                        vocab_size=args.vocab_size)
                 # Write into TensorArrays
                 actor_losses = actor_losses.write(i, actor_loss)
                 critic_losses = critic_losses.write(i, critic_loss)
 
                 epoch_actor_losses.append(actor_loss)
                 epoch_critic_losses.append(critic_loss)
+                buffer_actor_losses.append(actor_loss)
+                buffer_critic_losses.append(critic_loss)
+
         mean_actor_loss_epoch = tf.reduce_mean(epoch_actor_losses)
         mean_critic_loss_epoch = tf.reduce_mean(epoch_critic_losses)
         
         mean_actor_losses_epoch.append(mean_actor_loss_epoch)
         mean_critic_losses_epoch.append(mean_critic_loss_epoch)
 
-        eval_reward = evaluate_policy_reward(agent, critic,
-                           num_steps=args.num_steps, num_envs=args.num_envs,
-                           feature_dim=args.feature_dim, 
-                           num_same=args.num_same, num_diff1=args.num_diff1, num_diff2=args.num_diff2,
-                           which=args.which_dataset, dummy=args.dummy)
-        eval_rewards.append(eval_reward)
+        # eval_reward = evaluate_policy_reward(agent, critic,
+        #                 num_steps=args.num_steps, num_envs=args.num_envs,
+        #                 feature_dim=args.feature_dim, 
+        #                 num_same=args.num_same, num_diff1=args.num_diff1, num_diff2=args.num_diff2,
+        #                 which=args.which_dataset, dummy=args.dummy, trivial=args.trivial)
 
-        helpers.save_checkpoints(run_dir, epoch, agent, critic, num_epochs=args.num_epochs, save_every=args.save_every)
+        # eval_rewards.append(eval_reward)
+
+        buffer_data={
+        "rewards": buffer_rewards,
+        "actor_losses": buffer_actor_losses,
+        "critic_losses": buffer_critic_losses,
+        "messages": buffer_messages,
+        "preds": buffer_preds,
+        "targets": buffer_targets,
+        }
+
+        # if no saving of intermediary result, then set buffer_data=None
+        helpers.save_checkpoints(run_dir, epoch, agent, critic, num_epochs=args.num_epochs, save_every=args.save_every, buffer_data=None)
+        # Clear buffers after saving to prevent memory growth
+        if epoch % args.save_every == 0 and epoch != 0:
+            buffer_rewards.clear()
+            buffer_actor_losses.clear()
+            buffer_critic_losses.clear()
+            buffer_messages.clear()
+            buffer_preds.clear()
+            buffer_targets.clear()
         # ("eval reward in current epoch: ", eval_reward)
         
     # Stack TensorArrays to tensors
@@ -638,27 +813,34 @@ def train(args, run_dir):
     "mean_actor_losses_per_epoch": mean_actor_losses_epoch,
     "mean_critic_losses_per_epoch": mean_critic_losses_epoch,
     "train_accuracies": train_accuracies,
+    "exact_match_accuracies": exact_match_accuracies,
     "train_rewards": train_rewards,
-    "eval_rewards": eval_rewards,
     "raw_rewards": raw_rewards,
     "preds": all_preds,
+    "targets": all_targets,
+    "messages": all_messages,
     }
 
 
 
+
 if __name__ == "__main__":
+
+
     args = get_args()
+    # args = load_config("/home/vanfra/recovered files/bidirectional_signallling_game/config.json")
 
     run_dir = helpers.setup_run_dir(args)
 
     training_results = train(args, run_dir)
-    helpers.visualize_training_curves(training_results["train_accuracies"],
-                                      training_results["train_rewards"], 
-                                      training_results["eval_rewards"], 
-                                      training_results["mean_actor_losses_per_epoch"], 
-                                      training_results["mean_critic_losses_per_epoch"], 
-                                    save_path=f"{run_dir}/plots/training_curves.png")
-    
+        
     helpers.save_step_metrics(training_results, run_dir)
     helpers.save_epoch_metrics(training_results, run_dir)
     helpers.save_raw_data(training_results, run_dir)
+
+    helpers.visualize_training_curves(  training_rewards = training_results["train_rewards"], 
+                                        training_accuracies = training_results["train_accuracies"],
+                                        match_accuracies = training_results["exact_match_accuracies"],
+                                        actor_losses = training_results["mean_actor_losses_per_epoch"], 
+                                        critic_losses = training_results["mean_critic_losses_per_epoch"], 
+                                        save_path=f"{run_dir}/plots/training_curves.png")
