@@ -15,7 +15,7 @@ class AgentActor(tf.keras.Model):
 
 
     def call(self, feature_vector, input_message, prev_state):
-
+        
         batch_size = tf.shape(feature_vector)[0]
 
         img_emb = self.img_embed(feature_vector)    # [batch_size, num_img, emb_dim]
@@ -37,19 +37,24 @@ class AgentActor(tf.keras.Model):
         # cos_sim = -tf.keras.losses.cosine_similarity(img_emb, lstm_output_proj, axis=2) # [batch_size, num_images]
       
         # compute correlation between image embedding and lstm output for target prediction
-        corr = tf.reduce_sum(img_emb * lstm_output_proj, axis=2)
-
-        # get target prediction 
-        # target_probs_cos = tf.nn.sigmoid(cos_sim * 5)   # [batch_size, num_images] 
-        target_probs_corr = tf.nn.sigmoid(corr)
+        # corr = tf.reduce_sum(img_emb * lstm_output_proj, axis=2)
+  
+        # # get target prediction 
+        # # target_probs_cos = tf.nn.sigmoid(cos_sim * 5)   # [batch_size, num_images] 
+        # target_probs_corr = tf.nn.sigmoid(corr)
  
-        # create output_message
-        output_message = self.output_msg_dense(lstm_output)
-        output_message = tf.reshape(output_message, [batch_size, self.msg_len, self.vocab_size]) # [batch_size, msg_len, vocab_size]
-        output_message = tf.nn.softmax(output_message, axis=-1)
+        # # create output_message
+        # output_message = self.output_msg_dense(lstm_output)
+        # output_message = tf.reshape(output_message, [batch_size, self.msg_len, self.vocab_size]) # [batch_size, msg_len, vocab_size]
+        # output_message = tf.nn.softmax(output_message, axis=-1)
 
-        return target_probs_corr, output_message, (h,c)
-    
+        img_logits = tf.reduce_sum(img_emb*lstm_output_proj, axis=2)
+        msg_logits = self.output_msg_dense(lstm_output)
+        msg_logits = tf.reshape(msg_logits, [batch_size, self.msg_len, self.vocab_size])
+
+        # return target_probs_corr, output_message, (h,c)
+        return img_logits, msg_logits, (h,c)
+
     def call_on_sequence(self, feature_vector, input_message, prev_state):
         batch_size = tf.shape(feature_vector)[0]
         seq_len = tf.shape(feature_vector)[1]

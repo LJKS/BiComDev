@@ -10,6 +10,11 @@ import helpers
 import pandas as pd
 
 
+gpus = tf.config.list_physical_devices('GPU')
+if gpus:
+    for gpu in gpus:
+        tf.config.experimental.set_memory_growth(gpu, True)
+
 def get_args():
     parser = argparse.ArgumentParser(description="Train PPO on bidirectional multi-step signaling game")
 
@@ -252,14 +257,15 @@ def rollout_step(agent, critic, features, targets, input_message,
     """
 
 
-    probs_img, probs_msg, next_state_actor = agent(features, input_message, (prev_state_actor_h, prev_state_actor_c))
+    # probs_img, probs_msg, next_state_actor = agent(features, input_message, (prev_state_actor_h, prev_state_actor_c))
+    img_logits, msg_logits, next_state_actor = agent(features, input_message, (prev_state_actor_h, prev_state_actor_c))
     vals, next_state_critic = critic(features, input_message, (prev_state_critic_h, prev_state_critic_c))
 
-    img_dist = tfp.distributions.Bernoulli(probs=probs_img)
+    img_dist = tfp.distributions.Bernoulli(logits=img_logits)
     preds = img_dist.sample() 
     img_logps =img_dist.log_prob(preds)
 
-    msg_dist = tfp.distributions.Categorical(probs=probs_msg) 
+    msg_dist = tfp.distributions.Categorical(logits=msg_logits) 
     output_messages = msg_dist.sample()
     msg_logps = msg_dist.log_prob(output_messages)
 
@@ -576,16 +582,26 @@ def train_step(rollout_data,
     """
 
     with tf.GradientTape(persistent=True) as tape:
-        probs_img, probs_msg, _ = agent(rollout_data["features"], rollout_data["input_messages"],
+        # probs_img, probs_msg, _ = agent(rollout_data["features"], rollout_data["input_messages"],
+        #                                      (rollout_data["prev_state_actor_h"], rollout_data["prev_state_actor_c"]))
+       
+        img_logits, msg_logits, _ = agent(rollout_data["features"], rollout_data["input_messages"],
                                              (rollout_data["prev_state_actor_h"], rollout_data["prev_state_actor_c"]))
+        
         vals, _ = critic(rollout_data["features"], rollout_data["input_messages"],
                                              (rollout_data["prev_state_critic_h"], rollout_data["prev_state_critic_c"]))
                              
 
-        img_dist = tfp.distributions.Bernoulli(probs=probs_img)
+        # img_dist = tfp.distributions.Bernoulli(probs=probs_img)
+        # img_logps =img_dist.log_prob(rollout_data["preds"])
+
+        # msg_dist = tfp.distributions.Categorical(probs=probs_msg) 
+        # msg_logps = msg_dist.log_prob(rollout_data["output_messages"])
+
+        img_dist = tfp.distributions.Bernoulli(logits=img_logits)
         img_logps =img_dist.log_prob(rollout_data["preds"])
 
-        msg_dist = tfp.distributions.Categorical(probs=probs_msg) 
+        msg_dist = tfp.distributions.Categorical(logits=msg_logits) 
         msg_logps = msg_dist.log_prob(rollout_data["output_messages"])
 
 

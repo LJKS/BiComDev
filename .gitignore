@@ -1,6 +1,16 @@
 data/
 saved_data/
 runs/
+runs_num_img_2/
+runs_num_img_2_new/
+runs_num_img_2_num_steps_30/
+runs_regularization/
+
+make_all_heat_maps.py
+make_all_learning_curve_plots.py
+plot_task_performance.py
+run_grid_num_img_2.py
+agg_task_performance.py
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

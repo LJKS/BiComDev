@@ -12,18 +12,18 @@ import helpers
 
 
 
-run_dir="/home/vanfra/recovered files/bidirectional_signallling_game/runs/2026-02-17_23-40-42"
+run_dir="/home/vanfra/recovered files/bidirectional_signallling_game/runs/2026-02-24_07-50-12"
 
 epoch_data_path = os.path.join(run_dir, "training_epochs.csv")
 step_data_path = os.path.join(run_dir, "training_steps.csv")
 
 data_epoch = pd.read_csv(epoch_data_path, index_col="epoch")
 
-print(np.max(data_epoch["train_reward"]))
+# print(np.max(data_epoch["train_reward"]))
 
 n = 5
 top_n = np.partition(data_epoch["train_reward"], -n)[-n:]
-print(top_n)
+# print(top_n)
 
 
 
@@ -66,7 +66,7 @@ def tensor_str_to_float(x):
         if match:
             return float(match.group())
         else:
-            raise ValueError(f"Could not parse float from: {x}")
+            raise None
     return float(x)
 
 
@@ -76,71 +76,71 @@ actor_losses = data_epoch["mean_actor_loss"].apply(tensor_str_to_float)
 critic_losses = data_epoch["mean_critic_loss"].apply(tensor_str_to_float)
 eval_rewards=None
 
+print(critic_losses)
+
+# preds_per_epoch = data["preds"]
+
+# epoch_rows = []
+
+# for epoch, preds in enumerate(preds_per_epoch):
+#     preds = np.array(preds)             
+#     flat = preds.reshape(-1, 2)           
+#     total = len(flat)
+
+#     counts = Counter(map(tuple, flat))
+
+#     full_reward = (
+#         counts.get((1.0, 0.0), 0) +
+#         counts.get((0.0, 1.0), 0)
+#     )
+
+#     half_reward = (
+#         counts.get((1.0, 1.0), 0) +
+#         counts.get((0.0, 0.0), 0)
+#     )
+
+#     epoch_rows.append({
+#         "epoch": epoch,
+#         "full_reward_frac": full_reward / total,
+#         "ambiguous_frac": half_reward / total,
+#         "pred_[1,0]": counts.get((1.0, 0.0), 0) / total,
+#         "pred_[0,1]": counts.get((0.0, 1.0), 0) / total,
+#         "pred_[1,1]": counts.get((1.0, 1.0), 0) / total,
+#         "pred_[0,0]": counts.get((0.0, 0.0), 0) / total,
+#     })
 
 
-preds_per_epoch = data["preds"]
-
-epoch_rows = []
-
-for epoch, preds in enumerate(preds_per_epoch):
-    preds = np.array(preds)             
-    flat = preds.reshape(-1, 2)           
-    total = len(flat)
-
-    counts = Counter(map(tuple, flat))
-
-    full_reward = (
-        counts.get((1.0, 0.0), 0) +
-        counts.get((0.0, 1.0), 0)
-    )
-
-    half_reward = (
-        counts.get((1.0, 1.0), 0) +
-        counts.get((0.0, 0.0), 0)
-    )
-
-    epoch_rows.append({
-        "epoch": epoch,
-        "full_reward_frac": full_reward / total,
-        "ambiguous_frac": half_reward / total,
-        "pred_[1,0]": counts.get((1.0, 0.0), 0) / total,
-        "pred_[0,1]": counts.get((0.0, 1.0), 0) / total,
-        "pred_[1,1]": counts.get((1.0, 1.0), 0) / total,
-        "pred_[0,0]": counts.get((0.0, 0.0), 0) / total,
-    })
+# df = pd.DataFrame(epoch_rows)
 
 
-df = pd.DataFrame(epoch_rows)
+# plt.figure(figsize=(10, 6))
+
+# plt.plot(df["epoch"], df["full_reward_frac"], label="Full reward (1-hot)", linewidth=2)
+# plt.plot(df["epoch"], df["ambiguous_frac"], label="Half reward (ambiguous)", linewidth=2)
+
+# plt.xlabel("Epoch")
+# plt.ylabel("Fraction of predictions")
+# plt.title("Prediction mode usage over training")
+# plt.legend()
+# plt.grid(True)
+# plt.tight_layout()
+# plt.show()
 
 
-plt.figure(figsize=(10, 6))
+# # plotting different prediction combinations einzeln
+# plt.figure(figsize=(10, 6))
 
-plt.plot(df["epoch"], df["full_reward_frac"], label="Full reward (1-hot)", linewidth=2)
-plt.plot(df["epoch"], df["ambiguous_frac"], label="Half reward (ambiguous)", linewidth=2)
+# plt.plot(df["epoch"], df["pred_[1,0]"], label="[1, 0]")
+# plt.plot(df["epoch"], df["pred_[0,1]"], label="[0, 1]")
+# plt.plot(df["epoch"], df["pred_[1,1]"], label="[1, 1]")
+# plt.plot(df["epoch"], df["pred_[0,0]"], label="[0, 0]")
 
-plt.xlabel("Epoch")
-plt.ylabel("Fraction of predictions")
-plt.title("Prediction mode usage over training")
-plt.legend()
-plt.grid(True)
-plt.tight_layout()
-plt.show()
-
-
-# plotting different prediction combinations einzeln
-plt.figure(figsize=(10, 6))
-
-plt.plot(df["epoch"], df["pred_[1,0]"], label="[1, 0]")
-plt.plot(df["epoch"], df["pred_[0,1]"], label="[0, 1]")
-plt.plot(df["epoch"], df["pred_[1,1]"], label="[1, 1]")
-plt.plot(df["epoch"], df["pred_[0,0]"], label="[0, 0]")
-
-plt.xlabel("Epoch")
-plt.ylabel("Fraction of predictions")
-plt.title("Exact prediction pattern frequencies")
-plt.legend()
-plt.grid(True)
-plt.tight_layout()
-plt.show()
+# plt.xlabel("Epoch")
+# plt.ylabel("Fraction of predictions")
+# plt.title("Exact prediction pattern frequencies")
+# plt.legend()
+# plt.grid(True)
+# plt.tight_layout()
+# plt.show()
 
 

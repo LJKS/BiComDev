@@ -1,6 +1,7 @@
 import tensorflow as tf
 import matplotlib.pyplot as plt
 import os
+import re
 import numpy as np
 import pandas as pd
 from datetime import datetime
@@ -90,7 +91,7 @@ def calculate_mean_label_accuracy(merged_rollouts):
     train_accuracy = 0.5 * (accs[0] + accs[1])
     return train_accuracy
 
-def calculate_exact_match_accuracy(merged_rollouts):
+def calculate_exact_match_accuracy(merged_rollouts, timestep=None):
     """ Calculates mean accuracies based on one epochs rollout;
         Accuracy, represents only fully correct predictions
      Args:
@@ -102,10 +103,47 @@ def calculate_exact_match_accuracy(merged_rollouts):
     for agent in ["agent_1", "agent_2"]:
         preds = merged_rollouts[agent]["preds"]
         targets = merged_rollouts[agent]["targets"]
-        per_sample = tf.reduce_all(tf.equal(preds, targets), axis=-1)  # all images correct
-        accs.append(tf.cast(per_sample, tf.float32))
+
+        if timestep is not None:
+            preds = preds[:, timestep, :]     
+            targets = targets[:, timestep, :] 
+            correct = tf.reduce_all(tf.equal(preds, targets), axis=-1)
+            accs.append(tf.cast(correct, tf.float32))
+        else:
+            correct = tf.reduce_all(tf.equal(preds, targets), axis=-1)  # all images correct
+            accs.append(tf.cast(correct, tf.float32))
+
     exact_match_accuracy = 0.5 * (tf.reduce_mean(accs[0]) + tf.reduce_mean(accs[1]))
     return exact_match_accuracy
+
+    
+def final_exact_match_from_epoch(preds_epoch, targets_epoch):
+    def to_numpy(x):
+        if isinstance(x, tf.Tensor):
+            return x.numpy()
+        return x
+
+    preds = to_numpy(preds_epoch)
+    targets = to_numpy(targets_epoch)
+
+    # final timestep
+    preds_final = preds[:, -1, :]
+    targets_final = targets[:, -1, :]
+
+    correct = np.all(preds_final == targets_final, axis=-1)
+    return float(np.mean(correct))
+
+def compute_final_exact_match_curve(run_dir):
+    data = load_raw_data(run_dir)
+    preds_list = data["preds"]      
+    targets_list = data["targets"]  
+
+    final_curve = []
+    for e, (pred, target) in enumerate(zip(preds_list, targets_list)):
+        final_curve.append(final_exact_match_from_epoch(pred, target))
+    
+    results = np.array(final_curve)
+    return results
 
 def linear_anneal(epoch, start_epoch, end_epoch, start_val, end_val):
     """
@@ -196,6 +234,7 @@ def save_step_metrics(results, run_dir, filename="training_steps.csv"):
     path = os.path.join(run_dir, filename)
     df.to_csv(path, index=False)
 
+
 def save_epoch_metrics(results, run_dir,  filename="training_epochs.csv"):
     """saves the mean data per each epoch of full training and save as CSV file
     Args:
@@ -203,7 +242,6 @@ def save_epoch_metrics(results, run_dir,  filename="training_epochs.csv"):
         run_dir (str): The path to the directory of the current run
         file_name (str): Name under which the data will be save; exptected to be CSV format
     """
-
     num_epochs = len(results["mean_actor_losses_per_epoch"])
 
     df = pd.DataFrame({
@@ -252,6 +290,45 @@ def save_intermediate_metrics(ckpt_dir,rewards,actor_losses,critic_losses,messag
 
     with open(os.path.join(ckpt_dir, "intermediate_data.pkl"), "wb") as f:
         pickle.dump(data, f)
+
+#endregion
+
+#region Loading Data
+
+def tensor_str_to_float(x):
+    if isinstance(x, str):
+        match = re.search(r"[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?", x)
+        if match:
+            return float(match.group())
+        else:
+            raise None
+    return float(x)
+
+
+def load_raw_data(run_dir, filename="raw_data.pkl"):
+    "loads the pickle file from a given run, that contains unprocessed rewards, prediciton, messages, and targets"
+    path = os.path.join(run_dir, filename)
+    with open(path, "rb") as f:
+        return pickle.load(f)
+
+def load_epoch_data(run_dir, file_name="training_epochs.csv"):
+    """loads the CSV file from a given run, that contains mean 
+        - training rewards, 
+        - actor losses, 
+        - critic losses, 
+        - train per-image accuracies
+        - exact match accuracies"""
+
+    epoch_data_path = os.path.join(run_dir, file_name)
+    data_epoch = pd.read_csv(epoch_data_path, index_col="epoch")
+    return data_epoch
+
+def load_step_data(run_dir, file_name="training_steps.csv"):
+    """loads the CSV file from a given run, that contains stepwise actor and critic losses"""
+    step_data_path = os.path.join(run_dir, file_name)
+    step_data = pd.read_csv(step_data_path)
+    return step_data
+
 
 def load_intermediate_metrics(run_dir):
     ckpt_root = os.path.join(run_dir, "checkpoints")
@@ -324,3 +401,4 @@ def visualize_training_curves(training_rewards, training_accuracies, match_accur
         plt.show()
 
 #endregion
+
