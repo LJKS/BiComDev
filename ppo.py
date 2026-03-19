@@ -7,6 +7,7 @@ import json
 import agents
 import data 
 import helpers
+from tqdm import tqdm
 import pandas as pd
 
 
@@ -679,7 +680,7 @@ def train(args, run_dir):
     critic_losses = tf.TensorArray(tf.float32, size=0, dynamic_size=True)
 
 
-    for epoch in tf.range(args.num_epochs):
+    for epoch in tqdm(range(args.num_epochs)):
 
         # entropy bonus anneals down; might need to be adjusted depending on final experiments
         ent_msg = helpers.linear_anneal(
