@@ -1,4 +1,8 @@
 import tensorflow as tf
+CORR_TEMPERATURE = 5.0
+
+def check_nan(x, desc):
+    tf.print(desc, tf.math.reduce_any(tf.math.is_nan(x)))
 
 class AgentActor(tf.keras.Model):
     def __init__(self, embed_dim=16, vocab_size=10, lstm_units=128, msg_len=3):
@@ -6,38 +10,49 @@ class AgentActor(tf.keras.Model):
         self.msg_len = msg_len
         self.vocab_size = vocab_size
         
-        self.img_embed = tf.keras.layers.Dense(embed_dim)  # no activation
+        self.img_embed = tf.keras.layers.Dense(embed_dim, activation='sigmoid')  # no activation
         self.msg_embed = tf.keras.layers.Embedding(vocab_size, embed_dim)
         self.lstm = tf.keras.layers.LSTM(lstm_units, return_sequences=True, return_state=True)
-        self.lstm_proj = tf.keras.layers.Dense(embed_dim) # no acitvation
+        self.lstm_proj = tf.keras.layers.Dense(embed_dim, activation='sigmoid') # no acitvation
         self.output_msg_dense = tf.keras.layers.Dense(vocab_size*msg_len)
 
 
 
     def call(self, feature_vector, input_message, prev_state):
-
+        check_nan(feature_vector, "feature_vector")
+        #check_nan(input_message, "input_message")
         batch_size = tf.shape(feature_vector)[0]
 
         img_emb = self.img_embed(feature_vector)    # [batch_size, num_img, emb_dim]
         msg_emb = self.msg_embed(input_message)     # [batch_size, msg_len, emb_dim]
-
+        check_nan(img_emb, "img_emb")
+        check_nan(msg_emb, "msg_emb")
         msg_emb_reduced = tf.reduce_sum(msg_emb, axis=1)    # [batch_size, emb_dim]
         img_emb_reduced = tf.reduce_sum(img_emb, axis=1)    # [batch_size, emb_dim]
-
+        check_nan(msg_emb_reduced, "msg_emb_reduced")
+        check_nan(img_emb_reduced, "img_emb_reduced")
         # combine inputs to feed into lstm
         combined = tf.concat([img_emb_reduced, msg_emb_reduced], axis=1)    # [batch_size, emb_dim*2]
         combined = tf.expand_dims(combined, axis=1)         # [batch_size, 1, emb_dim*2]
-
+        check_nan(combined, "combined")
         lstm_output, h, c = self.lstm(combined, initial_state=prev_state) 
+        check_nan(lstm_output, "lstm_output")
+        check_nan(h, "lstm_h")
+        check_nan(c, "lstm_c")
 
         # projecting for shape match to image embedding
         lstm_output_proj = self.lstm_proj(lstm_output) 
-
+        check_nan(lstm_output_proj, "lstm_output_proj")
         # compute similarity between image embedding and lstm output for target prediction
         # cos_sim = -tf.keras.losses.cosine_similarity(img_emb, lstm_output_proj, axis=2) # [batch_size, num_images]
       
         # compute correlation between image embedding and lstm output for target prediction
-        corr = tf.reduce_sum(img_emb * lstm_output_proj, axis=2)
+        #check if any elements from img_emb and lstm_output_proj are nan
+        tf.print("img_emb contains NaN:", tf.math.reduce_any(tf.math.is_nan(img_emb)))
+        tf.print("lstm_output_proj contains NaN:", tf.math.reduce_any(tf.math.is_nan(lstm_output_proj)))
+        tf.print(tf.shape(img_emb), tf.shape(lstm_output_proj))
+        corr = tf.reduce_mean(img_emb * lstm_output_proj, axis=2)*CORR_TEMPERATURE
+        tf.print(corr[0,:])
 
         # get target prediction 
         # target_probs_cos = tf.nn.sigmoid(cos_sim * 5)   # [batch_size, num_images] 

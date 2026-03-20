@@ -1,3 +1,5 @@
+import math
+
 import tensorflow as tf
 import tensorflow_probability as tfp
 import os 
@@ -19,6 +21,8 @@ def get_args():
     parser.add_argument("--num_diff1", type=int, default=2, help="defines the number of images observed by agent 1 only")
     parser.add_argument("--num_diff2", type=int, default=2, help="defines the number of images observed by agent 1 only")
     parser.add_argument("--feature_dim", type=int, default=2048, help="Feature dimension of the input data. Default set to usual imagenet feature dimension; only needs to be adjusted for the dummy data")
+    parser.add_argument("--embed_dim", type=int, default=128, help="Embedding dimension of the input data")
+    parser.add_argument("--lstm_units", type=int, default=128, help="LSTM units")
     parser.add_argument("--dummy", action="store_true", help="if used, then the agent will be trained on a dummy dataset consisting of onehot vectors")
     parser.add_argument("--trivial", action="store_true", help="Use a single fixed trivial game instance")
 
@@ -26,13 +30,14 @@ def get_args():
     parser.add_argument("--num_epochs", type=int, default=500, help="number of epochs that the agents train for")
     parser.add_argument("--updates_per_epoch", type=int, default=2)
     parser.add_argument("--num_steps", type=int, default=20, help="maximum number of steps per game")
-    parser.add_argument("--num_envs", type=int, default=8, help="number of environments whichs rollouts are collected from in parallel (under the same policy)")
+    parser.add_argument("--num_envs", type=int, default=64, help="number of environments whichs rollouts are collected from in parallel (under the same policy)")
     parser.add_argument("--batch_size", type=int, default=32)
+    parser.add_argument("--ppo_buffer_size", type=int, default=10000, help="Buffer size for shuffling the dataset created from the rollouts")
     parser.add_argument("--which_dataset", type=str, default="TRAIN", help="details whether the training (TRAIN), testing (TEST), or validation (VAL) data is used")
 
     # PPO hyperparameters
-    parser.add_argument("--actor_lr", type=float, default=1e-4) 
-    parser.add_argument("--critic_lr", type=float, default=1e-3)
+    parser.add_argument("--actor_lr", type=float, default=1e-5)
+    parser.add_argument("--critic_lr", type=float, default=1e-5)
     parser.add_argument("--clip_epsilon", type=float, default=0.2)
     parser.add_argument("--entropy_coef_img", type=float, default=0.0001)
     parser.add_argument("--entropy_coef_msg", type=float, default=0.001)
@@ -71,7 +76,7 @@ def load_config(config_path):
     return args
 
 
-def initialize_agents(actor_lr, critic_lr, feature_dim, vocab_size, msg_len):
+def initialize_agents(actor_lr, critic_lr, feature_dim, embed_dim, lstm_units, vocab_size, msg_len):
     """"Initialises agent actor and critic networks
     Args:
         actor_lr, critic_lr (float): Learning rates per network passed to the optimizer
@@ -81,8 +86,8 @@ def initialize_agents(actor_lr, critic_lr, feature_dim, vocab_size, msg_len):
     
     Returns: Instances of th actor (agent) and critic networks, as well as their respective optimizers
         """
-    agent = agents.AgentActor(vocab_size=vocab_size, msg_len=msg_len)
-    critic = agents.AgentCritic(vocab_size=vocab_size)
+    agent = agents.AgentActor(vocab_size=vocab_size, msg_len=msg_len, embed_dim=embed_dim, lstm_units=lstm_units)
+    critic = agents.AgentCritic(vocab_size=vocab_size, embed_dim=embed_dim, lstm_units=lstm_units)
 
     optimizer_agent = tf.keras.optimizers.Adam(actor_lr) 
     optimizer_crit = tf.keras.optimizers.Adam(critic_lr) 
@@ -374,7 +379,7 @@ def do_n_rollout_steps(agent, critic, features_a1, targets_a1,
     return two_agents_rollout
 
     
-def do_k_rollouts(feature_dataset, agent, critic, reward_function, num_steps, num_envs):
+def do_k_rollouts(feature_dataset, agent, critic, reward_function, num_steps, k_rollouts):
     """A function that carries out k many separate rollouts
     Args:
         feature_dataset (tf.dataset): consisting of ((image_features_agent1, target_vector_agent1),(image_features_agent2, target_vector_agent2)) elements
@@ -383,20 +388,20 @@ def do_k_rollouts(feature_dataset, agent, critic, reward_function, num_steps, nu
         reward_function (function): some reward function based on correct target prediction 
             - takes predictions and targets as inputs
         num_steps (int): The number of steps until the rollout collection is terminated
-        num_envs (int): number of environments (games) from which rollouts are collected in parallel
+        k_rollouts (int): number of environments (games) from which rollouts are collected in parallel
     
     Return:
         A list of k rollouts with each element being a dict that contains all rollout information for both agents over num_step timesteps
     """
-    k_rollouts = []
-    for (features_a1, targets_a1), (features_a2, targets_a2) in feature_dataset.take(num_envs):
+    agg = []
+    for (features_a1, targets_a1), (features_a2, targets_a2) in feature_dataset.take(k_rollouts):
 
         rollout_steps = do_n_rollout_steps(agent, critic, features_a1, targets_a1,
                                                 features_a2, targets_a2,
                                                 reward_function, num_steps)
-        k_rollouts.append(rollout_steps)
+        agg.append(rollout_steps)
 
-    return k_rollouts
+    return agg
 
         
 
@@ -496,7 +501,6 @@ def rollouts_to_dataset(merged, buffer_size, batch_size):
     })
 
     dataset = dataset.shuffle(buffer_size).batch(batch_size)
-
     return dataset
 
 
@@ -557,7 +561,11 @@ def evaluate_policy_reward(agent, critic,
 
     return float(np.mean(rewards))
 
-@tf.function
+
+def check_nan(x, desc):
+    tf.print(desc, tf.math.reduce_any(tf.math.is_nan(x)))
+
+#@tf.function
 def train_step(rollout_data, 
                 agent, critic, optimizer_agent, optimizer_critic, 
                 clip_epsilon, entropy_coef_img, entropy_coef_msg, vocab_size):
@@ -582,7 +590,8 @@ def train_step(rollout_data,
         vals, _ = critic(rollout_data["features"], rollout_data["input_messages"],
                                              (rollout_data["prev_state_critic_h"], rollout_data["prev_state_critic_c"]))
                              
-
+        #debug
+        #probs_img = probs_img*0.9
         img_dist = tfp.distributions.Bernoulli(probs=probs_img)
         img_logps =img_dist.log_prob(rollout_data["preds"])
 
@@ -596,7 +605,7 @@ def train_step(rollout_data,
 
         # normalizing advantages
         advantages = rollout_data["advantages"]
-        advantages = (advantages - tf.reduce_mean(advantages)) / (tf.math.reduce_std(advantages) + 1e-8)
+        #advantages = (advantages - tf.reduce_mean(advantages)) / (tf.math.reduce_std(advantages) + 1e-8)
 
         unclipped = ratios * advantages
         clipped = tf.clip_by_value(ratios, 1 - clip_epsilon, 1 + clip_epsilon) * advantages
@@ -610,7 +619,8 @@ def train_step(rollout_data,
 
         actor_loss = -tf.reduce_mean(tf.minimum(unclipped, clipped)) - (entropy_coef_img * img_entropy) - (entropy_coef_msg * msg_entropy)
         critic_loss = tf.reduce_mean(tf.square(rollout_data["returns"] - vals))
-
+        check_nan(actor_loss, "Actor loss NaN:")
+        check_nan(critic_loss, "Critic loss NaN:")
     # Compute gradients
     agent_grads = tape.gradient(actor_loss, agent.trainable_variables)
     critic_grads = tape.gradient(critic_loss, critic.trainable_variables)
@@ -651,7 +661,7 @@ def train(args, run_dir):
 
 
     agent, critic, optimizer_agent, optimizer_crit = initialize_agents(actor_lr=args.actor_lr, critic_lr=args.critic_lr, 
-                                                                       feature_dim=args.feature_dim, 
+                                                                       feature_dim=args.feature_dim, embed_dim=args.embed_dim, lstm_units=args.lstm_units,
                                                                        vocab_size=args.vocab_size, msg_len=args.msg_len)
     
 
@@ -679,6 +689,20 @@ def train(args, run_dir):
     actor_losses = tf.TensorArray(tf.float32, size=0, dynamic_size=True)
     critic_losses = tf.TensorArray(tf.float32, size=0, dynamic_size=True)
 
+    # initialize dataset
+    if args.dummy:
+        print("WARNING, dummy mode for testing only")
+        dataset = generate_dummy_ppo_dataset(num_same=args.num_same, num_diff1=args.num_diff1, num_diff2=args.num_diff2,
+                                             shuffle_buffer_size=shuffle_buffer_size, prefetch_buffer_size=prefetch_buffer_size,
+                                             batch_size=args.batch_size, which=args.which_dataset, feature_dim=args.feature_dim)
+    elif args.trivial:
+        print("WARNING, trivial mode for testing only")
+        dataset = generate_trivial_ppo_dataset(feature_dim=16, batch_size=1)
+
+    else:
+        dataset = generate_ppo_dataset(num_same=args.num_same, num_diff1=args.num_diff1, num_diff2=args.num_diff2,
+                                       shuffle_buffer_size=shuffle_buffer_size, prefetch_buffer_size=prefetch_buffer_size,
+                                       batch_size=args.num_envs, which=args.which_dataset)
 
     for epoch in tqdm(range(args.num_epochs)):
 
@@ -698,24 +722,14 @@ def train(args, run_dir):
             end_val=0.0,
         )
 
-        # initialize dataset
-        if args.dummy:
-            dataset = generate_dummy_ppo_dataset(num_same=args.num_same, num_diff1=args.num_diff1, num_diff2=args.num_diff2, 
-                                shuffle_buffer_size=shuffle_buffer_size, prefetch_buffer_size=prefetch_buffer_size, 
-                                batch_size=args.batch_size, which=args.which_dataset, feature_dim=args.feature_dim)
-        elif args.trivial:
-            dataset = generate_trivial_ppo_dataset(feature_dim = 16, batch_size=1)
 
-        else:
-            dataset = generate_ppo_dataset(num_same=args.num_same, num_diff1=args.num_diff1, num_diff2=args.num_diff2, 
-                                            shuffle_buffer_size=shuffle_buffer_size, prefetch_buffer_size=prefetch_buffer_size, 
-                                            batch_size=args.batch_size, which=args.which_dataset)
-
-
-        k_rollouts = do_k_rollouts(dataset, 
-                                agent, critic,  
-                                reward_function=helpers.target_match_ratio, 
-                                num_steps=args.num_steps, num_envs=args.num_envs)
+        print('rollouts')
+        k_rollouts = math.ceil(args.ppo_buffer_size / (args.num_envs*args.num_steps))  # calculate how many rollouts we need to collect to fill the PPO buffer
+        print(f"Collecting {k_rollouts} rollout sets with {args.num_envs} environments and {args.num_steps} steps each to fill PPO buffer of size {args.ppo_buffer_size}")
+        k_rollouts = do_k_rollouts(dataset,
+                                   agent, critic,
+                                   reward_function=helpers.target_match_ratio,
+                                   num_steps=args.num_steps, k_rollouts=k_rollouts)
         
         merged_rollouts = merge_rollouts(k_rollouts)
         
@@ -748,7 +762,7 @@ def train(args, run_dir):
 
         epoch_actor_losses = []
         epoch_critic_losses = []
-
+        print('training')
         for update in tf.range(args.updates_per_epoch):
             for batch in rollout_dataset:
                 i = i+1
