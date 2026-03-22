@@ -28,7 +28,7 @@ def get_args():
 
     # training
     parser.add_argument("--num_epochs", type=int, default=500, help="number of epochs that the agents train for")
-    parser.add_argument("--updates_per_epoch", type=int, default=2)
+    parser.add_argument("--updates_per_epoch", type=int, default=10)
     parser.add_argument("--num_steps", type=int, default=20, help="maximum number of steps per game")
     parser.add_argument("--num_envs", type=int, default=64, help="number of environments whichs rollouts are collected from in parallel (under the same policy)")
     parser.add_argument("--batch_size", type=int, default=32)
@@ -36,11 +36,11 @@ def get_args():
     parser.add_argument("--which_dataset", type=str, default="TRAIN", help="details whether the training (TRAIN), testing (TEST), or validation (VAL) data is used")
 
     # PPO hyperparameters
-    parser.add_argument("--actor_lr", type=float, default=1e-5)
-    parser.add_argument("--critic_lr", type=float, default=1e-5)
+    parser.add_argument("--actor_lr", type=float, default=1e-4)
+    parser.add_argument("--critic_lr", type=float, default=1e-3)
     parser.add_argument("--clip_epsilon", type=float, default=0.2)
-    parser.add_argument("--entropy_coef_img", type=float, default=0.0001)
-    parser.add_argument("--entropy_coef_msg", type=float, default=0.001)
+    parser.add_argument("--entropy_coef_img", type=float, default=0.00001)
+    parser.add_argument("--entropy_coef_msg", type=float, default=0.00001)
 
     # Network parameters
     parser.add_argument("--vocab_size", type=int, default=10, help="Size of the discrete communication vocabulary")
@@ -49,6 +49,7 @@ def get_args():
     # Misc
     parser.add_argument("--save_every", type=int, default=5, help="Save every nth epoch")
     parser.add_argument("--save", action="store_false", help="create run folder and save results and plots in it")
+    parser.add_argument("--ppo_kl_early_stopping_threshold", type=float, default=0.02, help="Early stopping threshold for PPO") #see also https://iclr-blog-track.github.io/2022/03/25/ppo-implementation-details/
     return parser.parse_args()
 
 
@@ -565,7 +566,7 @@ def evaluate_policy_reward(agent, critic,
 def check_nan(x, desc):
     tf.print(desc, tf.math.reduce_any(tf.math.is_nan(x)))
 
-#@tf.function
+@tf.function
 def train_step(rollout_data, 
                 agent, critic, optimizer_agent, optimizer_critic, 
                 clip_epsilon, entropy_coef_img, entropy_coef_msg, vocab_size):
@@ -619,18 +620,18 @@ def train_step(rollout_data,
 
         actor_loss = -tf.reduce_mean(tf.minimum(unclipped, clipped)) - (entropy_coef_img * img_entropy) - (entropy_coef_msg * msg_entropy)
         critic_loss = tf.reduce_mean(tf.square(rollout_data["returns"] - vals))
-        check_nan(actor_loss, "Actor loss NaN:")
-        check_nan(critic_loss, "Critic loss NaN:")
+        #check_nan(actor_loss, "Actor loss NaN:")
+        #check_nan(critic_loss, "Critic loss NaN:")
     # Compute gradients
     agent_grads = tape.gradient(actor_loss, agent.trainable_variables)
     critic_grads = tape.gradient(critic_loss, critic.trainable_variables)
 
     optimizer_agent.apply_gradients(zip(agent_grads, agent.trainable_variables))
     optimizer_critic.apply_gradients(zip(critic_grads, critic.trainable_variables))
-
+    kl_estimate = joint_logps - rollout_data["joint_logps"]
     del tape
 
-    return actor_loss, critic_loss
+    return actor_loss, critic_loss, kl_estimate
 
 
 def train(args, run_dir):
@@ -666,6 +667,7 @@ def train(args, run_dir):
     
 
     train_rewards = []
+    last_step_rewards = []
     train_accuracies = []
     exact_match_accuracies = []
 
@@ -703,9 +705,8 @@ def train(args, run_dir):
         dataset = generate_ppo_dataset(num_same=args.num_same, num_diff1=args.num_diff1, num_diff2=args.num_diff2,
                                        shuffle_buffer_size=shuffle_buffer_size, prefetch_buffer_size=prefetch_buffer_size,
                                        batch_size=args.num_envs, which=args.which_dataset)
-
-    for epoch in tqdm(range(args.num_epochs)):
-
+    tqdm_iter = tqdm(range(args.num_epochs), desc="Training Progress")
+    for epoch in tqdm_iter:
         # entropy bonus anneals down; might need to be adjusted depending on final experiments
         ent_msg = helpers.linear_anneal(
             epoch,
@@ -723,9 +724,7 @@ def train(args, run_dir):
         )
 
 
-        print('rollouts')
         k_rollouts = math.ceil(args.ppo_buffer_size / (args.num_envs*args.num_steps))  # calculate how many rollouts we need to collect to fill the PPO buffer
-        print(f"Collecting {k_rollouts} rollout sets with {args.num_envs} environments and {args.num_steps} steps each to fill PPO buffer of size {args.ppo_buffer_size}")
         k_rollouts = do_k_rollouts(dataset,
                                    agent, critic,
                                    reward_function=helpers.target_match_ratio,
@@ -736,6 +735,8 @@ def train(args, run_dir):
         # logging of rollout data
         mean_reward = helpers.calculate_train_reward(merged_rollouts)
         train_rewards.append(mean_reward)
+        lsr = tf.reduce_mean(merged_rollouts["agent_1"]["joint_rewards"][:, -1])
+        last_step_rewards.append(lsr)  # reward of the last step of the rollout, only agent 1 since both agents get the same joint reward
 
         train_accuracy = helpers.calculate_mean_label_accuracy(merged_rollouts)
         train_accuracies.append(train_accuracy)
@@ -762,14 +763,14 @@ def train(args, run_dir):
 
         epoch_actor_losses = []
         epoch_critic_losses = []
-        print('training')
-        for update in tf.range(args.updates_per_epoch):
+        for sub_epoch in tf.range(args.updates_per_epoch):
+            kl_agg = []
             for batch in rollout_dataset:
                 i = i+1
 
                 combined_batch = helpers.combine_dicts(batch["agent_1"], batch["agent_2"])
 
-                actor_loss, critic_loss = train_step(combined_batch, agent, critic,
+                actor_loss, critic_loss, kl = train_step(combined_batch, agent, critic,
                                                         optimizer_agent, optimizer_crit,
                                                         clip_epsilon=args.clip_epsilon, 
                                                         entropy_coef_img=ent_img, entropy_coef_msg=ent_msg,
@@ -782,7 +783,12 @@ def train(args, run_dir):
                 epoch_critic_losses.append(critic_loss)
                 buffer_actor_losses.append(actor_loss)
                 buffer_critic_losses.append(critic_loss)
-
+                kl_agg.append(tf.reduce_mean(kl))
+            kl_estimate = tf.reduce_mean(kl_agg)
+            #Early stopping of PPO cycle if KL divergence exceeds intended maximum
+            if kl_estimate.numpy() > args.ppo_kl_early_stopping_threshold:
+                print(f'KL estimate exceeded proposed maximum kl divergence, broke PPO update in sub_epoch {sub_epoch} out of {args.updates_per_epoch}')
+                break
         mean_actor_loss_epoch = tf.reduce_mean(epoch_actor_losses)
         mean_critic_loss_epoch = tf.reduce_mean(epoch_critic_losses)
         
@@ -817,7 +823,8 @@ def train(args, run_dir):
             buffer_preds.clear()
             buffer_targets.clear()
         # ("eval reward in current epoch: ", eval_reward)
-        
+        #set tqdm desc
+        tqdm_iter.set_description(f"Reward: {lsr.numpy()}, KL[last]:{kl_estimate.numpy()}")
     # Stack TensorArrays to tensors
     actor_losses = actor_losses.stack()
     critic_losses = critic_losses.stack()
@@ -830,6 +837,7 @@ def train(args, run_dir):
     "train_accuracies": train_accuracies,
     "exact_match_accuracies": exact_match_accuracies,
     "train_rewards": train_rewards,
+    "last_step_rewards": last_step_rewards,
     "raw_rewards": raw_rewards,
     "preds": all_preds,
     "targets": all_targets,
@@ -853,7 +861,8 @@ if __name__ == "__main__":
     helpers.save_epoch_metrics(training_results, run_dir)
     helpers.save_raw_data(training_results, run_dir)
 
-    helpers.visualize_training_curves(  training_rewards = training_results["train_rewards"], 
+    helpers.visualize_training_curves(  training_rewards = training_results["train_rewards"],
+                                        last_step_rewards = training_results["last_step_rewards"],
                                         training_accuracies = training_results["train_accuracies"],
                                         match_accuracies = training_results["exact_match_accuracies"],
                                         actor_losses = training_results["mean_actor_losses_per_epoch"], 

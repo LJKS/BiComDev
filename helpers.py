@@ -286,10 +286,10 @@ def load_intermediate_metrics(run_dir):
 
 # region Plotting
 
-def visualize_training_curves(training_rewards, training_accuracies, match_accuracies, actor_losses, critic_losses, save_path=None):
+def visualize_training_curves(training_rewards, last_step_rewards, training_accuracies, match_accuracies, actor_losses, critic_losses, save_path=None):
     """plots the average training reward, average evaluation reward, and actor and critic losses, all per epoch"""
-
-    fig, axs = plt.subplots(5, 1, figsize=(8, 10))
+    #plot average
+    fig, axs = plt.subplots(6, 1, figsize=(8, 12))
 
     axs[0].plot(training_rewards)
     axs[0].set_title("Mean Training Reward per Epoch")
@@ -316,11 +316,17 @@ def visualize_training_curves(training_rewards, training_accuracies, match_accur
     axs[4].set_xlabel("Epoch")
     axs[4].set_ylabel("Loss")
 
+    #last_step
+    axs[5].plot(last_step_rewards)
+    axs[5].set_title("Mean Last Step Reward ")
+    axs[5].set_xlabel("Epoch")
+    axs[5].set_ylabel("Reward")
+
     plt.tight_layout()
     if save_path:
-        os.makedirs(os.path.dirname(save_path), exist_ok=True) 
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
         plt.savefig(save_path)
-    else: 
+    else:
         plt.show()
 
 #endregion
