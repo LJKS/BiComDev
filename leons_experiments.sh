@@ -1,3 +1,6 @@
-python ppo.py --num_same 2 --num_diff1 2 --num_diff2 2 --msg_len 1 --vocab_size 20  --num_steps 20 --num_epochs 1500 --embed_dim 48 --batch_size 128 --lstm_units 96
-python ppo.py --num_same 2 --num_diff1 2 --num_diff2 2 --msg_len 1 --vocab_size 20  --num_steps 20 --num_epochs 1500 --embed_dim 48 --batch_size 128 --lstm_units 96
-python ppo.py --num_same 2 --num_diff1 2 --num_diff2 2 --msg_len 1 --vocab_size 20  --num_steps 20 --num_epochs 1500 --embed_dim 48 --batch_size 128 --lstm_units 96
+python ppo.py --num_same 2 --num_diff1 2 --num_diff2 2 --msg_len 1 --vocab_size 20  --num_steps 20 --num_epochs 1500 --embed_dim 48 --batch_size 128 --lstm_units 192 --which_agent separated
+python ppo.py --num_same 2 --num_diff1 2 --num_diff2 2 --msg_len 1 --vocab_size 20  --num_steps 20 --num_epochs 1500 --embed_dim 48 --batch_size 128 --lstm_units 192 --which_agent separated
+python ppo.py --num_same 2 --num_diff1 2 --num_diff2 2 --msg_len 1 --vocab_size 20  --num_steps 20 --num_epochs 1500 --embed_dim 48 --batch_size 128 --lstm_units 192 --which_agent separated
+#python ppo.py --num_same 2 --num_diff1 2 --num_diff2 2 --msg_len 1 --vocab_size 20  --num_steps 20 --num_epochs 1500 --embed_dim 48 --batch_size 128 --lstm_units 96
+#python ppo.py --num_same 2 --num_diff1 2 --num_diff2 2 --msg_len 1 --vocab_size 20  --num_steps 20 --num_epochs 1500 --embed_dim 48 --batch_size 128 --lstm_units 96
+#python ppo.py --num_same 2 --num_diff1 2 --num_diff2 2 --msg_len 1 --vocab_size 20  --num_steps 20 --num_epochs 1500 --embed_dim 48 --batch_size 128 --lstm_units 96
