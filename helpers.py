@@ -227,6 +227,7 @@ def save_raw_data(results, run_dir, filename="raw_data.pkl"):
         "raw_rewards": results["raw_rewards"], # joint rewards of each agent, no mean over epoch yet (/= train_rewards)
         "preds": results["preds"],
         "messages": results["messages"],
+        "last_step_rewards": results["last_step_rewards"],
         "targets": results["targets"],
     }
     
@@ -234,6 +235,10 @@ def save_raw_data(results, run_dir, filename="raw_data.pkl"):
     with open(path, "wb") as f:
         pickle.dump(data_to_save, f)
 
+def load_raw_data(run_dir, filename="raw_data.pkl"):
+    path = os.path.join(run_dir, filename)
+    with open(path, "rb") as f:
+        return pickle.load(f)
 
 def save_intermediate_metrics(ckpt_dir,rewards,actor_losses,critic_losses,messages,preds,targets):
     def to_numpy(x):

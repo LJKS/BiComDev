@@ -67,6 +67,51 @@ class AgentActor(tf.keras.Model):
         return target_probs_corr, output_message, (h,c)
 
 
+    def call_with_scaling(self, feature_vector, input_message, prev_state, alpha):
+        #for integrated Gradients
+        batch_size = tf.shape(feature_vector)[0]
+        feature_vector = feature_vector * alpha
+        img_emb = self.img_embed(feature_vector)    # [batch_size, num_img, emb_dim]
+        msg_emb = self.msg_embed(input_message)     # [batch_size, msg_len, emb_dim]
+        msg_emb = msg_emb * alpha
+        msg_emb_reduced = tf.reduce_sum(msg_emb, axis=1)    # [batch_size, emb_dim]
+        img_emb_reduced = tf.reduce_sum(img_emb, axis=1)    # [batch_size, emb_dim]
+        #check_nan(msg_emb_reduced, "msg_emb_reduced")
+        #check_nan(img_emb_reduced, "img_emb_reduced")
+        # combine inputs to feed into lstm
+        combined = tf.concat([img_emb_reduced, msg_emb_reduced], axis=1)    # [batch_size, emb_dim*2]
+        combined = tf.expand_dims(combined, axis=1)         # [batch_size, 1, emb_dim*2]
+        #check_nan(combined, "combined")
+        lstm_output, h, c = self.lstm(combined, initial_state=prev_state)
+        tf.print(tf.shape(prev_state), tf.shape(h), tf.shape(c))
+        #check_nan(lstm_output, "lstm_output")
+        #check_nan(h, "lstm_h")
+        #check_nan(c, "lstm_c")
+
+        # projecting for shape match to image embedding
+        lstm_output_proj = self.lstm_proj(lstm_output)
+        #check_nan(lstm_output_proj, "lstm_output_proj")
+        # compute similarity between image embedding and lstm output for target prediction
+        # cos_sim = -tf.keras.losses.cosine_similarity(img_emb, lstm_output_proj, axis=2) # [batch_size, num_images]
+
+        # compute correlation between image embedding and lstm output for target prediction
+        #check if any elements from img_emb and lstm_output_proj are nan
+        #tf.print("img_emb contains NaN:", tf.math.reduce_any(tf.math.is_nan(img_emb)))
+        #tf.print("lstm_output_proj contains NaN:", tf.math.reduce_any(tf.math.is_nan(lstm_output_proj)))
+        #tf.print(tf.shape(img_emb), tf.shape(lstm_output_proj))
+        corr = tf.reduce_mean(img_emb * lstm_output_proj, axis=2)*CORR_TEMPERATURE
+        #tf.print(corr[0,:], tf.math.sigmoid(corr[0,:]))
+        # get target prediction
+        # target_probs_cos = tf.nn.sigmoid(cos_sim * 5)   # [batch_size, num_images]
+        target_probs_corr = tf.nn.sigmoid(corr)
+
+        # create output_message
+        output_message = self.output_msg_dense(lstm_output)
+        output_message = tf.reshape(output_message, [batch_size, self.msg_len, self.vocab_size]) # [batch_size, msg_len, vocab_size]
+        output_message = tf.nn.softmax(output_message, axis=-1)
+
+        return target_probs_corr, output_message, (h,c)
+
 class AgentActorSeparated(tf.keras.Model):
     def __init__(self, embed_dim=16, vocab_size=10, lstm_units=128, msg_len=3):
         super().__init__()
