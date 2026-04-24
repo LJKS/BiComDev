@@ -144,6 +144,8 @@ def setup_run_dir(args):
         args (Args.Namespace): The configuration of the current run; contains all externally defineable variables
     """
     run_id = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    #extend run_id with a random string, make sure no duplicates can exist for parallel started jobs
+    run_id = run_id + "_" + ''.join(np.random.choice(list('abcdefghijklmnopqrstuvwxyz0123456789'), size=10))
     run_dir = os.path.join("runs", run_id)
 
     os.makedirs(run_dir, exist_ok=False)
