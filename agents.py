@@ -59,10 +59,17 @@ class AgentActor(tf.keras.Model):
         # target_probs_cos = tf.nn.sigmoid(cos_sim * 5)   # [batch_size, num_images] 
         target_probs_corr = tf.nn.sigmoid(corr)
  
-        # create output_message
-        output_message = self.output_msg_dense(lstm_output)
-        output_message = tf.reshape(output_message, [batch_size, self.msg_len, self.vocab_size]) # [batch_size, msg_len, vocab_size]
-        output_message = tf.nn.softmax(output_message, axis=-1)
+        # # create output_message
+        # output_message = self.output_msg_dense(lstm_output)
+        # output_message = tf.reshape(output_message, [batch_size, self.msg_len, self.vocab_size]) # [batch_size, msg_len, vocab_size]
+        # output_message = tf.nn.softmax(output_message, axis=-1)
+
+        img_logits = tf.reduce_sum(img_emb*lstm_output_proj, axis=2)
+        msg_logits = self.output_msg_dense(lstm_output)
+        msg_logits = tf.reshape(msg_logits, [batch_size, self.msg_len, self.vocab_size])
+
+        # return target_probs_corr, output_message, (h,c)
+        return img_logits, msg_logits, (h,c)
 
         return target_probs_corr, output_message, (h,c)
 
