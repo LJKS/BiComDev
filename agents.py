@@ -37,7 +37,7 @@ class AgentActor(tf.keras.Model):
         combined = tf.expand_dims(combined, axis=1)         # [batch_size, 1, emb_dim*2]
         #check_nan(combined, "combined")
         lstm_output, h, c = self.lstm(combined, initial_state=prev_state)
-        tf.print(tf.shape(prev_state), tf.shape(h), tf.shape(c))
+        #tf.print(tf.shape(prev_state), tf.shape(h), tf.shape(c))
         #check_nan(lstm_output, "lstm_output")
         #check_nan(h, "lstm_h")
         #check_nan(c, "lstm_c")

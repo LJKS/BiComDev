@@ -196,6 +196,15 @@ def save_step_metrics(results, run_dir, filename="training_steps.csv"):
     path = os.path.join(run_dir, filename)
     df.to_csv(path, index=False)
 
+def fix_state_timestep(state):
+    """fixes state timestep, which is currently the states produces at steps 0 to final_step. Should be the input states of the respective states. This requires removing the final timestep, and prepending a zero state
+    Args:
+        - state: a tensor of shape [batch_size, num_steps, state_dim]
+    """
+    zero_state_vector = tf.zeros_like(state[:, 0:1, :])  # shape [batch_size, 1, state_dim]
+    fixed_state = tf.concat([zero_state_vector, state[:, :-1, :]], axis=1)  # shape [batch_size, num_steps, state_dim]
+    return fixed_state
+
 def save_epoch_metrics(results, run_dir,  filename="training_epochs.csv"):
     """saves the mean data per each epoch of full training and save as CSV file
     Args:

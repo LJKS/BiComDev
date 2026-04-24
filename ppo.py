@@ -766,7 +766,11 @@ def train(args, run_dir):
 
         # adding advantages and returns to rollout dict
         merged_rollouts = prepare_ppo_information(merged_rollouts, critic)
-        
+        #fix state data in rollouts
+        merged_rollouts['agent_1']['prev_state_actor_h'] = helpers.fix_state_timestep(merged_rollouts['agent_1']['prev_state_actor_h'])
+        merged_rollouts['agent_1']['prev_state_actor_c'] = helpers.fix_state_timestep(merged_rollouts['agent_1']['prev_state_actor_c'])
+        merged_rollouts['agent_2']['prev_state_actor_h'] = helpers.fix_state_timestep(merged_rollouts['agent_2']['prev_state_actor_h'])
+        merged_rollouts['agent_2']['prev_state_actor_c'] = helpers.fix_state_timestep(merged_rollouts['agent_2']['prev_state_actor_c'])
         rollout_dataset = rollouts_to_dataset(merged_rollouts, buffer_size=shuffle_buffer_size, batch_size=args.batch_size)
 
         epoch_actor_losses = []
@@ -832,7 +836,7 @@ def train(args, run_dir):
             buffer_targets.clear()
         # ("eval reward in current epoch: ", eval_reward)
         #set tqdm desc
-        tqdm_iter.set_description(f"Reward: {lsr.numpy()}, KL[last]:{kl_estimate.numpy()}")
+        tqdm_iter.set_description(f"LS-Reward: {lsr.numpy()}, KL[last]:{kl_estimate.numpy()}")
     # Stack TensorArrays to tensors
     actor_losses = actor_losses.stack()
     critic_losses = critic_losses.stack()

@@ -1,0 +1,3 @@
+python ppo.py --num_same 2 --num_diff1 4 --num_diff2 4 --msg_len 1 --vocab_size 20  --num_steps 20 --num_epochs 1000 --embed_dim 48 --batch_size 128 --lstm_units 96
+python ppo.py --num_same 2 --num_diff1 6 --num_diff2 6 --msg_len 1 --vocab_size 20  --num_steps 20 --num_epochs 1000 --embed_dim 48 --batch_size 128 --lstm_units 96
+python ppo.py --num_same 2 --num_diff1 8 --num_diff2 8 --msg_len 1 --vocab_size 20  --num_steps 20 --num_epochs 1000 --embed_dim 48 --batch_size 128 --lstm_units 96

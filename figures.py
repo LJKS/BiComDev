@@ -7,7 +7,8 @@ import os
 import json
 import math
 import ppo
-
+import numpy as np
+from sklearn.linear_model import LinearRegression
 
 def plot_relative(runs_a: list, runs_desc_a: str, runs_b: list, runs_desc_b: str):
     """
@@ -127,7 +128,7 @@ def plot_relative(runs_a: list, runs_desc_a: str, runs_b: list, runs_desc_b: str
     plt.tight_layout(rect=[0, 0, 0.92, 1])  # leave room for the legend on the right
     plt.show()
 
-def extract_data_for_probe(save_dir, epoch, sample_epochs, num_parallel):
+def extract_data_for_probe(save_dir, epoch, sample_epochs_per_extraction, num_extractions, num_parallel):
     four_digit_step = str(epoch).zfill(4)
     model_path = os.path.join(save_dir, 'checkpoints')
     print(model_path)
@@ -141,25 +142,134 @@ def extract_data_for_probe(save_dir, epoch, sample_epochs, num_parallel):
     agent, critic, _, _ = ppo.initialize_agents(actor_lr=args.actor_lr, critic_lr=args.critic_lr,
                                                                        feature_dim=args.feature_dim, embed_dim=args.embed_dim, lstm_units=args.lstm_units,
                                                                        vocab_size=args.vocab_size, msg_len=args.msg_len, which_agent=args.which_agent)
+    #load agent weights
+    agent.load_weights(model_path)
     shuffle_buffer_size = 512
     prefetch_buffer_size = 4
     dataset = ppo.generate_ppo_dataset(num_same=args.num_same, num_diff1=args.num_diff1, num_diff2=args.num_diff2,
                                    shuffle_buffer_size=shuffle_buffer_size, prefetch_buffer_size=prefetch_buffer_size,
                                    batch_size=num_parallel, which=args.which_dataset)
-    num_rollouts = math.ceil(sample_epochs/num_parallel)
-    k_rollouts = ppo.do_k_rollouts(dataset,
-                               agent, critic,
-                               reward_function=helpers.target_match_ratio,
-                               num_steps=args.num_steps, k_rollouts=num_rollouts)
-    rollouts = ppo.merge_rollouts(k_rollouts)
+    num_rollouts = math.ceil(sample_epochs_per_extraction/num_parallel)
+    s_1 = []
+    s_2 = []
+    for _ in range(num_extractions):
+        k_rollouts = ppo.do_k_rollouts(dataset,
+                                   agent, critic,
+                                   reward_function=helpers.target_match_ratio,
+                                   num_steps=args.num_steps, k_rollouts=num_rollouts)
+        rollouts = ppo.merge_rollouts(k_rollouts)
 
-    should_be_equal = rollouts['agent_1']['input_messages'][:, 1:, :] == rollouts['agent_2']['output_messages'][:, :19, :]
-    print(tf.reduce_all(should_be_equal))
+        should_be_equal = rollouts['agent_1']['input_messages'][:, 1:, :] == rollouts['agent_2']['output_messages'][:, :19, :]
+        print(tf.reduce_all(should_be_equal))
+        states_agent_1 = tf.concat([rollouts['agent_1']['prev_state_actor_h'], rollouts['agent_1']['prev_state_actor_c']], axis=-1)
+        states_agent_2 = tf.concat([rollouts['agent_2']['prev_state_actor_h'], rollouts['agent_2']['prev_state_actor_c']], axis=-1)
+        s_1.append(states_agent_1.numpy())
+        s_2.append(states_agent_2.numpy())
+    s_1 = np.concatenate(s_1, axis=0)
+    s_2 = np.concatenate(s_2, axis=0)
+    return s_1, s_2
 
-    state_zero_h = rollouts['agent_1']['prev_state_actor_h'][:, 0, :]
-    state_zero_c = rollouts['agent_2']['prev_state_actor_c'][:, 0, :]
-    print('a')
-    print('as')
+def adjusted_r2(r2, num_samples_n, num_variables_p):
+    assert num_samples_n >= num_variables_p, "Number of samples must be greater than or equal to number of variables for adjusted R^2 calculation."
+    adj_r2 = 1 - ((1 - r2) * (num_samples_n - 1) / (num_samples_n - num_variables_p - 1))
+    return adj_r2
+
+def linear_regression_probe(states_agent_1, states_agent_2):
+    #reshape data
+    feat_dim = tf.shape(states_agent_1)[-1].numpy()
+    states_agent_1 = np.reshape(states_agent_1, (-1, feat_dim))
+    states_agent_2 = np.reshape(states_agent_2, (-1, feat_dim))
+    linreg = LinearRegression(n_jobs=-1)
+    linreg = linreg.fit(states_agent_1, states_agent_2)
+    r_squared = linreg.score(states_agent_1, states_agent_2)
+
+    num_samples = states_agent_1.shape[0]
+    num_vars = states_agent_1.shape[1] #ingoring intercept, could have normalized first
+    adj_r2 = adjusted_r2(r_squared, num_samples, num_vars)
+
+    print(f'R-squared: {r_squared}, Adjusted R-squared: {adj_r2}')
+    return linreg
+
+def lin_reg_probe_timesteps(states_agent_1, states_agent_2, probe):
+    #Computes r2 over timesteps
+    #sklearn r2    feat_dim = tf.shape(states_agent_1)[-1].numpy()
+    feat_dim = tf.shape(states_agent_1)[-1].numpy()
+    states_agent_1_flat = np.reshape(states_agent_1, (-1, feat_dim))
+    states_agent_2_flat = np.reshape(states_agent_2, (-1, feat_dim))
+    r2_scores_sk = probe.score(states_agent_1_flat, states_agent_2_flat)
+    print(f'R-squared from sk learn: {r2_scores_sk}')
+    pred = probe.predict(states_agent_1_flat)
+    #reshape pred to original shape
+    pred = np.reshape(pred, states_agent_2.shape)
+    var_states_agent_2 = np.square(states_agent_2 - np.mean(states_agent_2, axis=(0,1), keepdims=True))
+    var_states_agent_2 = np.mean(var_states_agent_2, axis=(0,1), keepdims=True)
+    #make sure the minimum of the variance is smaaaaaaall
+    variances =np.sort(var_states_agent_2.flatten())
+    print(f'min variance of variance vector {np.min(var_states_agent_2)}')
+    #count zeros in error message
+    #assert np.min(var_states_agent_2) > 1e-6, f"Variance of states_agent_2 is too small, cannot compute R^2 properly. Multiple entries are close to zero: {np.min(var_states_agent_2)}"
+    squared_residuals_agent_2 = np.square(states_agent_2 - pred)
+    print(np.mean(squared_residuals_agent_2), 'squared residuals, median is:', np.median(squared_residuals_agent_2))
+    r2_per_datapoint = 1. - (squared_residuals_agent_2 / var_states_agent_2)
+    print(f'self made r2: {np.mean(r2_per_datapoint)}')
+    num_steps = states_agent_1.shape[1]
+    r2_per_datapoint = np.mean(r2_per_datapoint, axis=-1)
+    r2_all_vs_timestep = np.reshape(r2_per_datapoint, (-1, num_steps))
+    print(f'resulting shapes; org:{states_agent_2.shape}, result shape: {r2_all_vs_timestep.shape}')
+    return r2_all_vs_timestep
+
+def r2_vs_timestep_to_df(r2_vs_timestep, step_base: int = 1) -> pd.DataFrame:
+    """
+    Convert r2_vs_timestep (shape [samples_per_step, step]) into a tidy DataFrame
+    with exactly two columns: 'step' and 'value'.
+
+    Args:
+        r2_vs_timestep: 2-D array-like (numpy array, TF tensor, or list-of-equal-length-lists)
+                         shape (n_samples, n_steps)
+        step_base: 0 or 1. If 1, steps will be 1..n_steps. If 0, steps will be 0..n_steps-1.
+
+    Returns:
+        pd.DataFrame with columns ['step', 'value'] and n_samples * n_steps rows.
+    """
+    # If TF tensor, convert to numpy
+    if isinstance(r2_vs_timestep, tf.Tensor):
+        r2_vs_timestep = r2_vs_timestep.numpy()
+
+    arr = np.asarray(r2_vs_timestep)
+
+    # Validate shape
+    if arr.ndim != 2:
+        raise ValueError(f"r2_vs_timestep must be 2-D. Got shape {arr.shape}")
+
+    n_samples, n_steps = arr.shape
+
+    # Build wide DataFrame with string column names '0','1',...
+    cols = [str(i) for i in range(n_steps)]
+    df_wide = pd.DataFrame(arr, columns=cols)
+
+    # Melt into long/tidy format; no id_vars so every cell becomes a row
+    df_long = df_wide.melt(var_name='step', value_name='r2')
+
+    # Convert step from string to integer and apply base offset if requested
+    df_long['step'] = df_long['step'].astype(int) + (step_base if step_base in (0,1) else 1)
+
+    # Keep only 'step' and 'value' columns (in that order)
+    df_result = df_long[['step', 'r2']].reset_index(drop=True)
+
+    return df_result
+
+def plot_probe_step_results(r2_vs_timestep):
+    """
+    Args: r2_vs_timestep: np array of shape [samples_per_step, step]
+    """
+    #process to df
+    print('making df')
+    df = r2_vs_timestep_to_df(r2_vs_timestep, step_base=0.)
+    print('plotting...')
+    sns.lineplot(data=df, x='step', y='r2')
+    plt.show()
+
+
 
 def test_plot_relative():
     runs_a = [
@@ -174,13 +284,18 @@ def test_plot_relative():
     ]
     runs_desc_b = 'shared'
     plot_relative(runs_a,runs_desc_a,runs_b,runs_desc_b)
-    extract_data_for_probe()
 
 def test_probe():
     dir = 'runs/2026-03-23_01-25-54'
     step = 1499
-    extract_data_for_probe(dir, step, sample_epochs=1000, num_parallel=128)
-
+    #train data probe
+    d_1, d_2 = extract_data_for_probe(dir, step, sample_epochs_per_extraction=2000, num_extractions=2, num_parallel=256)
+    probe = linear_regression_probe(d_1, d_2)
+    #test data probe
+    d_1, d_2 = extract_data_for_probe(dir, step, sample_epochs_per_extraction=2000, num_extractions=2, num_parallel=256)
+    r2_timesteps = lin_reg_probe_timesteps(d_1, d_2, probe)
+    print('plot now')
+    plot_probe_step_results(r2_timesteps)
 def main():
     #test_plot_relative()
     test_probe()
