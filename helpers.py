@@ -234,6 +234,14 @@ def save_step_metrics(results, run_dir, filename="training_steps.csv"):
     path = os.path.join(run_dir, filename)
     df.to_csv(path, index=False)
 
+def fix_state_timestep(state):
+    """fixes state timestep, which is currently the states produces at steps 0 to final_step. Should be the input states of the respective states. This requires removing the final timestep, and prepending a zero state
+    Args:
+        - state: a tensor of shape [batch_size, num_steps, state_dim]
+    """
+    zero_state_vector = tf.zeros_like(state[:, 0:1, :])  # shape [batch_size, 1, state_dim]
+    fixed_state = tf.concat([zero_state_vector, state[:, :-1, :]], axis=1)  # shape [batch_size, num_steps, state_dim]
+    return fixed_state
 
 def save_epoch_metrics(results, run_dir,  filename="training_epochs.csv"):
     """saves the mean data per each epoch of full training and save as CSV file
@@ -265,6 +273,7 @@ def save_raw_data(results, run_dir, filename="raw_data.pkl"):
         "raw_rewards": results["raw_rewards"], # joint rewards of each agent, no mean over epoch yet (/= train_rewards)
         "preds": results["preds"],
         "messages": results["messages"],
+        "last_step_rewards": results["last_step_rewards"],
         "targets": results["targets"],
     }
     
@@ -272,6 +281,10 @@ def save_raw_data(results, run_dir, filename="raw_data.pkl"):
     with open(path, "wb") as f:
         pickle.dump(data_to_save, f)
 
+def load_raw_data(run_dir, filename="raw_data.pkl"):
+    path = os.path.join(run_dir, filename)
+    with open(path, "rb") as f:
+        return pickle.load(f)
 
 def save_intermediate_metrics(ckpt_dir,rewards,actor_losses,critic_losses,messages,preds,targets):
     def to_numpy(x):
@@ -363,10 +376,10 @@ def load_intermediate_metrics(run_dir):
 
 # region Plotting
 
-def visualize_training_curves(training_rewards, training_accuracies, match_accuracies, actor_losses, critic_losses, save_path=None):
+def visualize_training_curves(training_rewards, last_step_rewards, training_accuracies, match_accuracies, actor_losses, critic_losses, save_path=None):
     """plots the average training reward, average evaluation reward, and actor and critic losses, all per epoch"""
-
-    fig, axs = plt.subplots(5, 1, figsize=(8, 10))
+    #plot average
+    fig, axs = plt.subplots(6, 1, figsize=(8, 12))
 
     axs[0].plot(training_rewards)
     axs[0].set_title("Mean Training Reward per Epoch")
@@ -393,11 +406,17 @@ def visualize_training_curves(training_rewards, training_accuracies, match_accur
     axs[4].set_xlabel("Epoch")
     axs[4].set_ylabel("Loss")
 
+    #last_step
+    axs[5].plot(last_step_rewards)
+    axs[5].set_title("Mean Last Step Reward ")
+    axs[5].set_xlabel("Epoch")
+    axs[5].set_ylabel("Reward")
+
     plt.tight_layout()
     if save_path:
-        os.makedirs(os.path.dirname(save_path), exist_ok=True) 
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
         plt.savefig(save_path)
-    else: 
+    else:
         plt.show()
 
 #endregion
